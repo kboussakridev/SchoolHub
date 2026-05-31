@@ -1,26 +1,410 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap');
 @import "tailwindcss";
 
+@theme {
+  --font-sans: 'Inter', sans-serif;
+  --font-display: 'Outfit', sans-serif;
+  
+  --radius-lg: 1rem;
+  --radius-md: 0.75rem;
+  --radius-sm: 0.5rem;
+
+  /* Core brand tokens */
+  --color-primary: hsl(var(--primary));
+  --color-primary-dark: hsl(var(--primary-dark));
+  --color-accent: hsl(var(--accent));
+  --color-accent-dark: hsl(var(--accent-dark));
+
+  /* Map purple → Navy */
+  --color-purple-300: hsl(var(--accent));
+  --color-purple-400: hsl(var(--accent));
+  --color-purple-500: hsl(var(--primary));
+  --color-purple-600: hsl(var(--primary-dark));
+  --color-purple-700: hsl(var(--primary-dark));
+  --color-purple-950: 224 85% 8%;
+
+  /* Map indigo → Navy/Gold */
+  --color-indigo-400: hsl(var(--accent));
+  --color-indigo-500: hsl(var(--primary));
+  --color-indigo-600: hsl(var(--primary-dark));
+  --color-indigo-700: hsl(var(--primary-dark));
+
+  /* Map violet → brand */
+  --color-violet-400: hsl(var(--accent));
+  --color-violet-500: hsl(var(--primary));
+  --color-violet-600: hsl(var(--primary-dark));
+
+  /* Map zinc → semantic theme tokens */
+  --color-zinc-950: hsl(var(--background));
+  --color-zinc-900: hsl(var(--card));
+  --color-zinc-800: hsl(var(--secondary));
+  --color-zinc-700: hsl(var(--muted));
+  --color-zinc-600: hsl(var(--muted-foreground));
+  --color-zinc-500: hsl(var(--muted-foreground));
+  --color-zinc-400: hsl(var(--muted-foreground));
+  --color-zinc-300: hsl(var(--card-foreground) / 0.7);
+  --color-zinc-200: hsl(var(--border));
+  --color-zinc-100: hsl(var(--foreground));
+  --color-zinc-50: hsl(var(--background));
+}
+
+/* ───────────────── DARK MODE (Default) ───────────────── */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: 224 35% 8%;
+  --foreground: 48 60% 96%;
+
+  --card: 224 30% 11%;
+  --card-foreground: 48 60% 96%;
+
+  --popover: 224 30% 11%;
+  --popover-foreground: 48 60% 96%;
+
+  --primary: 224 85% 45%;        /* Royal Navy Blue */
+  --primary-dark: 224 85% 32%;
+  --primary-foreground: 48 60% 96%;  /* Clotted Cream */
+
+  --secondary: 224 25% 18%;
+  --secondary-foreground: 48 60% 96%;
+
+  --muted: 224 25% 18%;
+  --muted-foreground: 220 20% 65%;
+
+  --accent: 46 75% 55%;           /* Luxury Gold */
+  --accent-dark: 46 75% 42%;
+  --accent-foreground: 224 85% 12%;
+
+  --destructive: 0 62.8% 40%;
+  --destructive-foreground: 0 0% 98%;
+
+  --border: 224 25% 20%;
+  --input: 224 25% 20%;
+  --ring: 224 85% 45%;
+
+  --success: 142 70% 40%;
+  --success-foreground: 0 0% 98%;
+
+  --warning: 38 92% 50%;
+  --warning-foreground: 224 85% 12%;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+/* ───────────────── LIGHT MODE ───────────────── */
+.light-theme {
+  --background: 48 50% 97%;       /* Clotted Cream paper */
+  --foreground: 224 85% 15%;      /* Deep Navy text */
+
+  --card: 48 40% 100%;
+  --card-foreground: 224 85% 15%;
+
+  --popover: 48 40% 100%;
+  --popover-foreground: 224 85% 15%;
+
+  --primary: 224 85% 28%;         /* Deep Navy */
+  --primary-dark: 224 85% 18%;
+  --primary-foreground: 48 50% 97%; /* Cream */
+
+  --secondary: 48 30% 91%;
+  --secondary-foreground: 224 85% 15%;
+
+  --muted: 48 30% 91%;
+  --muted-foreground: 224 25% 40%;
+
+  --accent: 46 70% 38%;           /* Deep Gold */
+  --accent-dark: 46 70% 28%;
+  --accent-foreground: 48 50% 97%;
+
+  --destructive: 0 72% 51%;
+  --destructive-foreground: 0 0% 100%;
+
+  --border: 224 15% 82%;
+  --input: 224 15% 88%;
+  --ring: 224 85% 28%;
+
+  --success: 142 60% 35%;
+  --success-foreground: 0 0% 100%;
+
+  --warning: 38 92% 42%;
+  --warning-foreground: 0 0% 100%;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+/* ───────────────── BASE STYLES ───────────────── */
+* {
+  border-color: hsl(var(--border));
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background-color: hsl(var(--background));
+  color: hsl(var(--foreground));
+  font-family: var(--font-sans);
+  overflow-x: hidden;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-display);
+  color: hsl(var(--foreground));
+}
+
+/* ───────────────── GLASSMORPHISM ───────────────── */
+.glass-card {
+  background: rgba(10, 18, 40, 0.55);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.light-theme .glass-card {
+  background: rgba(255, 252, 240, 0.85);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(28, 43, 100, 0.1);
+}
+
+/* ───────────────── GRADIENTS & GLOWS ───────────────── */
+.glow-indigo {
+  background: radial-gradient(circle at 50% 50%, hsla(var(--primary), 0.18) 0%, transparent 55%);
+}
+
+.glow-violet {
+  background: radial-gradient(circle at 80% 20%, hsla(var(--accent), 0.14) 0%, transparent 60%);
+}
+
+.gradient-text {
+  background: linear-gradient(135deg, hsl(var(--accent)) 0%, hsl(var(--primary)) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.light-theme .gradient-text {
+  background: linear-gradient(135deg, hsl(var(--primary)) 0%, hsl(var(--accent)) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* ───────────────── SCROLLBARS ───────────────── */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: hsl(var(--background));
+}
+
+::-webkit-scrollbar-thumb {
+  background: hsl(var(--primary) / 0.35);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--primary) / 0.6);
+}
+
+/* ───────────────── UTILITY HELPERS ───────────────── */
+
+/* Theme-aware text colors */
+.text-theme-primary { color: hsl(var(--foreground)); }
+.text-theme-muted   { color: hsl(var(--muted-foreground)); }
+.text-theme-accent  { color: hsl(var(--accent)); }
+.text-theme-brand   { color: hsl(var(--primary)); }
+
+/* ───────────────── SELECT INPUTS ───────────────── */
+select {
+  background-color: hsl(var(--card));
+  color: hsl(var(--card-foreground));
+  border-color: hsl(var(--border));
+}
+
+/* ───────────────── TOAST NOTIFICATIONS ───────────────── */
+.toast-notification {
+  background: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--primary-dark))) !important;
+  color: hsl(var(--primary-foreground)) !important;
+  border-color: hsl(var(--primary) / 0.5) !important;
+}
+
+/* ───────────────── GLASS CARD TEXT ───────────────── */
+/* Ensure all text inside glass cards respects the theme */
+.glass-card {
+  color: hsl(var(--foreground));
+}
+
+/* ───────────────── LIGHT THEME GLOBAL OVERRIDES ───────────────── */
+.light-theme {
+  /* White text → Navy foreground */
+  .text-white {
+    color: hsl(var(--foreground)) !important;
+  }
+
+  /* White bg with dark text → Navy bg with Cream text (for buttons) */
+  .bg-white {
+    background-color: hsl(var(--primary)) !important;
+    color: hsl(var(--primary-foreground)) !important;
+  }
+
+  .hover\:bg-zinc-200:hover {
+    background-color: hsl(var(--primary-dark)) !important;
+    color: hsl(var(--primary-foreground)) !important;
+  }
+
+  /* Semi-transparent whites → light navy tints */
+  .bg-white\/5 {
+    background-color: hsl(var(--primary) / 0.06) !important;
+  }
+
+  .bg-white\/10 {
+    background-color: hsl(var(--primary) / 0.1) !important;
+  }
+
+  .hover\:bg-white\/5:hover {
+    background-color: hsl(var(--primary) / 0.06) !important;
+  }
+
+  .hover\:bg-white\/10:hover {
+    background-color: hsl(var(--primary) / 0.1) !important;
+  }
+
+  .border-white\/5 {
+    border-color: hsl(var(--border)) !important;
+  }
+
+  .border-white\/10 {
+    border-color: hsl(var(--border)) !important;
+  }
+
+  /* Header hero section overrides */
+  header {
+    background-color: hsl(var(--background) / 0.92) !important;
+    border-color: hsl(var(--border)) !important;
+  }
+
+  /* Landing page root container */
+  .min-h-screen.bg-zinc-950 {
+    background-color: hsl(var(--background)) !important;
+  }
+
+  /* Dashboard mockup widget backgrounds */
+  .bg-zinc-900\/90 {
+    background-color: hsl(var(--card)) !important;
+  }
+
+  /* FAQ items */
+  .border-white\/5.bg-white\/5 {
+    background-color: hsl(var(--card)) !important;
+    border-color: hsl(var(--border)) !important;
+  }
+
+  .bg-zinc-950\/40 {
+    background-color: hsl(var(--secondary)) !important;
+  }
+
+  /* Landing page gradient footer banner */
+  .bg-gradient-to-t.from-purple-950\/15 {
+    background: linear-gradient(to top, hsl(var(--primary) / 0.08), transparent) !important;
+  }
+
+  /* Pricing recommended border */
+  .border-purple-500 {
+    border-color: hsl(var(--primary)) !important;
+  }
+
+  .bg-purple-500 {
+    background-color: hsl(var(--primary)) !important;
+    color: hsl(var(--primary-foreground)) !important;
+  }
+
+  /* Muted / zinc text */
+  .text-zinc-400,
+  .text-zinc-500 {
+    color: hsl(var(--muted-foreground)) !important;
+  }
+
+  .text-zinc-200,
+  .text-zinc-300 {
+    color: hsl(var(--card-foreground)) !important;
+  }
+
+  .text-zinc-100 {
+    color: hsl(var(--foreground)) !important;
+  }
+
+  /* Gradient-to-r from-purple buttons → Navy gradient */
+  .from-purple-500.to-indigo-600,
+  .bg-gradient-to-r.from-purple-500 {
+    background: linear-gradient(135deg, hsl(var(--primary)) 0%, hsl(var(--primary-dark)) 100%) !important;
+    color: hsl(var(--primary-foreground)) !important;
+  }
+
+  /* Gradient border wrappers on mockup */
+  .from-purple-500\/30.to-indigo-600\/30 {
+    background: linear-gradient(135deg, hsl(var(--primary) / 0.2) 0%, hsl(var(--accent) / 0.1) 100%) !important;
+  }
+
+  /* Sidebar: active link */
+  .from-purple-500\/20.to-indigo-600\/10 {
+    background: linear-gradient(135deg, hsl(var(--primary) / 0.12) 0%, hsl(var(--accent) / 0.06) 100%) !important;
+  }
+
+  /* Sidebar border left on active item */
+  .border-purple-500 {
+    border-color: hsl(var(--primary)) !important;
+  }
+
+  /* Sidebar text-purple-400 → Navy */
+  .text-purple-400 {
+    color: hsl(var(--primary)) !important;
+  }
+
+  .text-purple-300 {
+    color: hsl(var(--primary)) !important;
+  }
+
+  /* DemoControls panel */
+  .glass-card {
+    color: hsl(var(--foreground));
+  }
+
+  .text-white\/90,
+  .text-white\/70,
+  .text-white\/50 {
+    color: hsl(var(--foreground)) !important;
+    opacity: 1;
+  }
+
+  /* Badge / pill DEMO ACTIVE */
+  .bg-purple-500\/10.border-purple-500\/30 {
+    background-color: hsl(var(--primary) / 0.08) !important;
+    border-color: hsl(var(--primary) / 0.25) !important;
+  }
+
+  /* Demo active school badge */
+  .bg-white\/10.border.border-purple-500\/40 {
+    background-color: hsl(var(--primary) / 0.1) !important;
+    border-color: hsl(var(--primary) / 0.3) !important;
+  }
+
+  /* DemoControls inactive role button */
+  .bg-white\/5.hover\:bg-white\/10 {
+    background-color: hsl(var(--primary) / 0.06) !important;
+  }
+
+  /* settings gear button */
+  .glass-card.hover\:bg-purple-600\/30 {
+    color: hsl(var(--foreground)) !important;
+  }
+
+  /* hero badge */
+  .bg-purple-500\/10.border-purple-500\/25 {
+    background-color: hsl(var(--primary) / 0.08) !important;
+    border-color: hsl(var(--primary) / 0.2) !important;
+  }
+
+  .text-purple-400 {
+    color: hsl(var(--primary)) !important;
+  }
+
+  /* Emerald success kept */
+  .text-emerald-400 {
+    color: hsl(var(--success)) !important;
+  }
 }
