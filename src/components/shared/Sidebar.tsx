@@ -97,16 +97,15 @@ export default function Sidebar() {
         className="flex items-center justify-between px-5 h-20"
         style={{ borderBottom: "1px solid hsl(var(--border))" }}
       >
-        <Link href="/" className="flex items-center gap-3">
-          <div
-            className="w-9 h-9 rounded-xl flex items-center justify-center shadow-lg shrink-0"
+        <Link href="/" className="flex items-center gap-3 group">
+          <img
+            src="/logo.png"
+            alt="SchoolHub Logo"
+            className="w-9 h-9 rounded-xl shadow-lg shrink-0 border border-white/10 group-hover:border-emerald-500/30 transition-all object-cover"
             style={{
-              background: "linear-gradient(135deg, hsl(var(--primary)), hsl(var(--primary-dark)))",
-              boxShadow: "0 4px 12px hsl(var(--primary) / 0.3)",
+              boxShadow: "0 4px 12px rgba(16, 185, 129, 0.15)",
             }}
-          >
-            <Sparkles className="w-5 h-5" style={{ color: "hsl(var(--primary-foreground))" }} />
-          </div>
+          />
           {!isCollapsed && (
             <span className="font-extrabold text-lg tracking-wider gradient-text">
               SchoolHub

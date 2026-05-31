@@ -35,6 +35,17 @@ import {
   mockEvents,
   mockAuditLogs,
   avatarHashes,
+  // ChatGPT Bonus Models
+  MockBus,
+  MockCanteenMenu,
+  MockNotification,
+  MockDocumentVault,
+  MockRolePermissions,
+  mockBuses,
+  mockCanteenMenus,
+  mockNotifications,
+  mockDocuments,
+  mockRolePermissions,
 } from "@/lib/mockData";
 
 interface SchoolHubContextType {
@@ -67,12 +78,20 @@ interface SchoolHubContextType {
   messages: MockMessage[];
   events: MockEvent[];
   auditLogs: MockAuditLog[];
+  
+  // ChatGPT Bonus Models
+  buses: MockBus[];
+  canteenMenus: MockCanteenMenu[];
+  notifications: MockNotification[];
+  documents: MockDocumentVault[];
+  rolePermissions: MockRolePermissions[];
 
   // Tenant Scoped Mutators
   addStudent: (student: Omit<MockStudent, "id" | "schoolId" | "userId"> & { name: string; email: string }) => { success: boolean; error?: string };
   deleteStudent: (studentId: string) => void;
-  addTeacher: (teacher: Omit<MockTeacher, "id" | "schoolId" | "userId"> & { name: string; email: string }) => void;
+  addTeacher: (teacher: Omit<MockTeacher, "id" | "schoolId" | "userId"> & { name: string; email: string; imageUrl?: string }) => void;
   deleteTeacher: (teacherId: string) => void;
+  updateTeacher: (teacherId: string, updatedData: Partial<Omit<MockTeacher, "id" | "schoolId" | "userId">> & { name?: string; email?: string; imageUrl?: string }) => void;
   addClass: (cls: Omit<MockClass, "id" | "schoolId" | "schedule">) => void;
   takeAttendance: (classId: string, date: string, records: { studentId: string; status: "present" | "absent" | "late"; remarks?: string }[]) => void;
   justifyAbsence: (attendanceId: string, remarks: string, newRecord?: { studentId: string; classId: string; date: string }) => void;
@@ -85,6 +104,15 @@ interface SchoolHubContextType {
   toggleSchoolStatus: (schoolId: string) => void;
   changeSchoolPlan: (schoolId: string, plan: "basic" | "pro" | "enterprise") => void;
   updateSchoolDetails: (schoolId: string, name: string, address: string, primarySystem: string) => void;
+  addSchool: (schoolData: { name: string; slug: string; plan: "basic" | "pro" | "enterprise"; address?: string; primarySystem?: string }) => void;
+  archiveSchool: (schoolId: string) => void;
+
+  // ChatGPT Bonus Actions
+  addNotification: (title: string, message: string) => void;
+  signDocument: (docId: string) => void;
+  addPaymentInvoice: (studentId: string, amount: number, description: string, type: "tuition" | "transport" | "canteen" | "activity") => void;
+  recordPayment: (paymentId: string, method: "stripe" | "cash" | "bank_transfer", partialAmount?: number) => void;
+  requestParentMeeting: (teacherId: string, date: string, time: string, reason: string) => void;
 
   // Analytics Helpers
   getSchoolStats: () => {
@@ -127,10 +155,81 @@ export function SchoolHubProvider({ children }: { children: React.ReactNode }) {
   const [events, setEvents] = useState<MockEvent[]>(mockEvents);
   const [auditLogs, setAuditLogs] = useState<MockAuditLog[]>(mockAuditLogs);
 
+  // ChatGPT Bonus States
+  const [buses, setBuses] = useState<MockBus[]>(mockBuses);
+  const [canteenMenus] = useState<MockCanteenMenu[]>(mockCanteenMenus);
+  const [notifications, setNotifications] = useState<MockNotification[]>(mockNotifications);
+  const [documents, setDocuments] = useState<MockDocumentVault[]>(mockDocuments);
+  const [rolePermissions, setRolePermissions] = useState<MockRolePermissions[]>(mockRolePermissions);
+
   const currentUser = users.find((u) => u.id === "user_owner") || users[0];
   const activeSchool = schools.find((s) => s.id === activeSchoolId);
 
-  // Load theme and session settings
+  // ChatGPT Bonus Actions
+  const addNotification = (title: string, message: string) => {
+    const newNotif: MockNotification = {
+      id: "notif_" + Date.now(),
+      schoolId: activeSchoolId,
+      userId: "user_parent_1", // Default for simulation
+      title,
+      message,
+      read: false,
+      createdAt: Date.now(),
+    };
+    setNotifications((prev) => [newNotif, ...prev]);
+  };
+
+  const signDocument = (docId: string) => {
+    setDocuments((prev) =>
+      prev.map((d) => (d.id === docId ? { ...d, isSigned: true } : d))
+    );
+    logSystemAction("SIGN_DOCUMENT", `Signature electronique du document ID ${docId}`, activeSchoolId);
+  };
+
+  const addPaymentInvoice = (studentId: string, amount: number, description: string, type: "tuition" | "transport" | "canteen" | "activity") => {
+    const newPayment: MockPayment = {
+      id: "pay_" + Date.now(),
+      schoolId: activeSchoolId,
+      studentId,
+      amount,
+      dueDate: new Date(Date.now() + 15 * 86400000).toISOString().split("T")[0],
+      status: "pending",
+      description: `${description} (${type})`,
+    };
+    setPayments((prev) => [newPayment, ...prev]);
+    logSystemAction("CREATE_PAYMENT", `Nouvelle facture comptable emise: ${description} (${amount} EUR)`, activeSchoolId);
+  };
+
+  const recordPayment = (paymentId: string, method: "stripe" | "cash" | "bank_transfer", partialAmount?: number) => {
+    setPayments((prev) =>
+      prev.map((p) => {
+        if (p.id === paymentId) {
+          const isPartial = partialAmount && partialAmount < p.amount;
+          if (isPartial) {
+            logSystemAction("RECORD_PARTIAL_PAYMENT", `Paiement partiel recu par ${method.toUpperCase()} : ${partialAmount} EUR / ${p.amount} EUR`, activeSchoolId);
+            return {
+              ...p,
+              amount: p.amount - (partialAmount || 0),
+              description: `${p.description} (Solde restant)`,
+            };
+          } else {
+            logSystemAction("RECORD_PAYMENT", `Paiement complet recu par ${method.toUpperCase()} (ID: ${paymentId})`, activeSchoolId);
+            return { ...p, status: "paid" as const, paidAt: Date.now() };
+          }
+        }
+        return p;
+      })
+    );
+  };
+
+  const requestParentMeeting = (teacherId: string, date: string, time: string, reason: string) => {
+    const teacher = teachers.find(t => t.id === teacherId);
+    const teacherUser = users.find(u => u.id === teacher?.userId);
+    logSystemAction("REQUEST_MEETING", `Demande de rendez-vous avec Pr. ${teacherUser?.name || teacherId} pour le ${date} a ${time}. Motif: ${reason}`, activeSchoolId);
+    addNotification("Rendez-vous Demandé", `Demande de rendez-vous avec Pr. ${teacherUser?.name || teacherId} soumise.`);
+  };
+
+  // Load theme, session and persisted mock database (Client side only)
   useEffect(() => {
     const savedTheme = localStorage.getItem("schoolhub-theme") as "dark" | "light" | null;
     const savedRole = localStorage.getItem("schoolhub-role") as any;
@@ -148,7 +247,81 @@ export function SchoolHubProvider({ children }: { children: React.ReactNode }) {
     if (savedSchool) {
       setActiveSchoolIdState(savedSchool);
     }
+
+    // Persisted Mock Database Loader (tous les modules ERP persistent !)
+    const loadState = (key: string, setter: Function) => {
+      const saved = localStorage.getItem(`schoolhub-db-${key}`);
+      if (saved) {
+        try {
+          let parsed = JSON.parse(saved);
+          if (key === "auditLogs" && Array.isArray(parsed)) {
+            // Dédupliquer les logs par ID pour nettoyer la DB persistée
+            const uniqueLogs: any[] = [];
+            const seenIds = new Set();
+            parsed.forEach((log: any) => {
+              if (log && log.id && !seenIds.has(log.id)) {
+                seenIds.add(log.id);
+                uniqueLogs.push(log);
+              }
+            });
+            parsed = uniqueLogs;
+          }
+          setter(parsed);
+        } catch (e) {
+          console.error(`Error loading state ${key}`, e);
+        }
+      }
+    };
+
+    loadState("schools", setSchools);
+    loadState("users", setUsers);
+    loadState("memberships", setMemberships);
+    loadState("students", setStudents);
+    loadState("teachers", setTeachers);
+    loadState("classes", setClasses);
+    loadState("attendance", setAttendance);
+    loadState("assignments", setAssignments);
+    loadState("submissions", setSubmissions);
+    loadState("grades", setGrades);
+    loadState("payments", setPayments);
+    loadState("conversations", setConversations);
+    loadState("messages", setMessages);
+    loadState("events", setEvents);
+    loadState("auditLogs", setAuditLogs);
+    loadState("buses", setBuses);
+    loadState("notifications", setNotifications);
+    loadState("documents", setDocuments);
   }, []);
+
+  // Save database to localStorage on any changes (Client side only)
+  useEffect(() => {
+    const saveState = (key: string, data: any) => {
+      localStorage.setItem(`schoolhub-db-${key}`, JSON.stringify(data));
+    };
+
+    saveState("schools", schools);
+    saveState("users", users);
+    saveState("memberships", memberships);
+    saveState("students", students);
+    saveState("teachers", teachers);
+    saveState("classes", classes);
+    saveState("attendance", attendance);
+    saveState("assignments", assignments);
+    saveState("submissions", submissions);
+    saveState("grades", grades);
+    saveState("payments", payments);
+    saveState("conversations", conversations);
+    saveState("messages", messages);
+    saveState("events", events);
+    saveState("auditLogs", auditLogs);
+    saveState("buses", buses);
+    saveState("notifications", notifications);
+    saveState("documents", documents);
+  }, [
+    schools, users, memberships, students, teachers, classes, attendance,
+    assignments, submissions, grades, payments, conversations, messages,
+    events, auditLogs, buses, notifications, documents
+  ]);
 
   const applyTheme = (t: "dark" | "light") => {
     const root = window.document.documentElement;
@@ -179,7 +352,7 @@ export function SchoolHubProvider({ children }: { children: React.ReactNode }) {
   // Add system Audit Log
   const logSystemAction = (action: string, details: string, schoolId?: string) => {
     const newLog: MockAuditLog = {
-      id: "log_" + Date.now(),
+      id: "log_" + Date.now() + "_" + Math.random().toString(36).substring(2, 9),
       schoolId,
       userId: currentUser.id,
       action,
@@ -265,7 +438,7 @@ export function SchoolHubProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const addTeacher = (teacherData: Omit<MockTeacher, "id" | "schoolId" | "userId"> & { name: string; email: string }) => {
+  const addTeacher = (teacherData: Omit<MockTeacher, "id" | "schoolId" | "userId"> & { name: string; email: string; imageUrl?: string }) => {
     const newUserId = "user_teacher_" + Date.now();
     const newTeacherId = "teacher_" + Date.now();
 
@@ -274,7 +447,7 @@ export function SchoolHubProvider({ children }: { children: React.ReactNode }) {
       name: teacherData.name,
       email: teacherData.email,
       isSuperAdmin: false,
-      imageUrl: `https://images.unsplash.com/photo-${avatarHashes[Math.floor(Math.random() * avatarHashes.length)]}?q=80&w=200`,
+      imageUrl: teacherData.imageUrl || `https://images.unsplash.com/photo-${avatarHashes[Math.floor(Math.random() * avatarHashes.length)]}?q=80&w=200`,
       createdAt: Date.now(),
     };
 
@@ -284,6 +457,11 @@ export function SchoolHubProvider({ children }: { children: React.ReactNode }) {
       userId: newUserId,
       subjects: teacherData.subjects,
       availability: teacherData.availability,
+      phone: teacherData.phone,
+      bio: teacherData.bio,
+      contractType: teacherData.contractType,
+      hourlyRate: teacherData.hourlyRate,
+      assignedClassIds: teacherData.assignedClassIds,
     };
 
     const newMembership: MockMembership = {
@@ -299,6 +477,38 @@ export function SchoolHubProvider({ children }: { children: React.ReactNode }) {
     setMemberships((prev) => [...prev, newMembership]);
 
     logSystemAction("CREATE_TEACHER", `Recrutement du Pr. ${teacherData.name}`, activeSchoolId);
+  };
+
+  const updateTeacher = (
+    teacherId: string,
+    updatedData: Partial<Omit<MockTeacher, "id" | "schoolId" | "userId">> & { name?: string; email?: string; imageUrl?: string }
+  ) => {
+    // We retrieve the teacher to find the associated userId
+    const currentTeachers = [...teachers];
+    const teacher = currentTeachers.find((t) => t.id === teacherId);
+
+    if (teacher) {
+      // Update teachers state
+      setTeachers((prev) =>
+        prev.map((t) => (t.id === teacherId ? { ...t, ...updatedData } : t))
+      );
+
+      // Update users state
+      setUsers((prev) =>
+        prev.map((u) =>
+          u.id === teacher.userId
+            ? {
+                ...u,
+                name: updatedData.name !== undefined ? updatedData.name : u.name,
+                email: updatedData.email !== undefined ? updatedData.email : u.email,
+                imageUrl: updatedData.imageUrl !== undefined ? updatedData.imageUrl : u.imageUrl,
+              }
+            : u
+        )
+      );
+
+      logSystemAction("UPDATE_TEACHER", `Mise à jour de la fiche du Pr. ${updatedData.name || teacher.id}`, activeSchoolId);
+    }
   };
 
   const deleteTeacher = (teacherId: string) => {
@@ -455,6 +665,47 @@ export function SchoolHubProvider({ children }: { children: React.ReactNode }) {
     );
   };
 
+  const addSchool = (schoolData: { 
+    name: string; 
+    slug: string; 
+    plan: "basic" | "pro" | "enterprise"; 
+    address?: string; 
+    primarySystem?: string; 
+  }) => {
+    const quotas = { basic: 50, pro: 300, enterprise: 9999 };
+    const newSchool: MockSchool = {
+      id: "school_" + Date.now(),
+      name: schoolData.name,
+      slug: schoolData.slug,
+      plan: schoolData.plan,
+      status: "active",
+      maxStudentsQuota: quotas[schoolData.plan],
+      stripeCustomerId: "cus_stripe_" + Date.now().toString().substring(6),
+      stripeSubscriptionId: "sub_stripe_" + Date.now().toString().substring(6),
+      createdAt: Date.now(),
+      settings: {
+        primaryColor: "#6366f1",
+        logoUrl: undefined,
+        address: schoolData.address || "12 Rue de l'Éducation, Paris",
+        primarySystem: schoolData.primarySystem || "Français",
+      }
+    };
+    setSchools((prev) => [...prev, newSchool]);
+    logSystemAction("CREATE_SCHOOL", `Nouveau contrat SaaS signé avec l'établissement: ${schoolData.name} (${schoolData.plan.toUpperCase()})`);
+  };
+
+  const archiveSchool = (schoolId: string) => {
+    setSchools((prev) =>
+      prev.map((s) => {
+        if (s.id === schoolId) {
+          logSystemAction("ARCHIVE_SCHOOL", `Établissement ${s.name} archivé (masqué des listes actives)`);
+          return { ...s, status: "archived" as const };
+        }
+        return s;
+      })
+    );
+  };
+
   // Scoped metrics
   const getSchoolStats = () => {
     const schoolStudents = students.filter((s) => s.schoolId === activeSchoolId);
@@ -546,6 +797,7 @@ export function SchoolHubProvider({ children }: { children: React.ReactNode }) {
         deleteStudent,
         addTeacher,
         deleteTeacher,
+        updateTeacher,
         addClass,
         takeAttendance,
         justifyAbsence,
@@ -556,8 +808,21 @@ export function SchoolHubProvider({ children }: { children: React.ReactNode }) {
         toggleSchoolStatus,
         changeSchoolPlan,
         updateSchoolDetails,
+        addSchool,
+        archiveSchool,
         getSchoolStats,
         getSuperAdminStats,
+        // ChatGPT Bonus States & Actions
+        buses,
+        canteenMenus,
+        notifications,
+        documents,
+        rolePermissions,
+        addNotification,
+        signDocument,
+        addPaymentInvoice,
+        recordPayment,
+        requestParentMeeting,
       }}
     >
       {children}

@@ -4,10 +4,18 @@ import React, { useState } from "react";
 import { useSchoolHub } from "../providers/SchoolHubProvider";
 import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
-import { Users, GraduationCap, ClipboardCheck, CreditCard, Sparkles, CheckCircle, ArrowRight, BookOpen } from "lucide-react";
+import { askSchoolHubIA } from "@/lib/ai/aiHelpers";
+import { 
+  Users, GraduationCap, ClipboardCheck, CreditCard, Sparkles, CheckCircle, ArrowRight, BookOpen,
+  Bus, Utensils, FolderOpen, FileCheck, MessageSquare, Calendar, MapPin, Loader2, Lock, Check, Sparkle
+} from "lucide-react";
 
 export default function ParentDashboard() {
-  const { students, grades, payments, payInvoice, attendance, classes, parents, currentUser, users } = useSchoolHub();
+  const { 
+    students, grades, payments, payInvoice, attendance, classes, parents, currentUser, users, activeSchoolId,
+    // ChatGPT Bonus fields
+    buses, canteenMenus, notifications, documents, rolePermissions, addNotification, signDocument, requestParentMeeting, teachers, recordPayment
+  } = useSchoolHub();
   
   // Résoudre le parent connecté (ou par défaut Khalid Mansour) et filtrer ses enfants légitimes
   const currentParent = parents.find((p) => p.userId === currentUser?.id) || parents.find((p) => p.id === "parent_alqalam") || parents[0];
@@ -15,6 +23,18 @@ export default function ParentDashboard() {
   const [selectedChildId, setSelectedChildId] = useState(myChildren[0]?.id || "");
   const [successPaymentId, setSuccessPaymentId] = useState<string | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  // ChatGPT Bonus UI States
+  const [parentActiveTab, setParentActiveTab] = useState<"transport" | "canteen" | "documents" | "correspondence" | "aicoach">("correspondence");
+  const [meetingTeacherId, setMeetingTeacherId] = useState(teachers[0]?.id || "teacher_alqalam");
+  const [meetingDate, setMeetingDate] = useState("2026-06-05");
+  const [meetingTime, setMeetingTime] = useState("16:00");
+  const [meetingReason, setMeetingReason] = useState("Faire un point sur la progression en Tajwid");
+  
+  const [aiPrompt, setAiPrompt] = useState("");
+  const [aiResponse, setAiResponse] = useState<string | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [liveMapVisible, setLiveMapVisible] = useState(false);
 
   const selectedChild = students.find((s) => s.id === selectedChildId);
   const childGrades = grades.filter((g) => g.studentId === selectedChildId);
@@ -34,48 +54,57 @@ export default function ParentDashboard() {
   };
 
   const downloadMockFile = (filename: string, htmlContent: string) => {
-    showToast("Génération du fichier PDF professionnel en cours...");
+    showToast("Génération du document de bulletin...");
+
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      showToast("Erreur : Veuillez autoriser les fenêtres pop-up pour générer le PDF.");
+      return;
+    }
+
+    // Append script inside htmlContent to trigger window.print() after resource loading completes
+    const injectPrintScript = htmlContent.replace(
+      "</body>",
+      `<script>
+        window.onload = function() {
+          setTimeout(function() {
+            window.print();
+          }, 350);
+        };
+      </script></body>`
+    );
+
+    printWindow.document.write(injectPrintScript);
+    printWindow.document.close();
     
-    const runConversion = () => {
-      const opt = {
-        margin: [15, 15],
-        filename: filename,
-        image: { type: 'jpeg', quality: 0.98 },
-        html2canvas: { scale: 2, useCORS: true, logging: false },
-        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
-      };
+    showToast("Le document PDF vectoriel est prêt !");
+  };
 
-      // Utiliser directement le rendu de chaîne HTML virtuel natif de html2pdf (sans injection dans le DOM)
-      // @ts-ignore
-      window.html2pdf().from(htmlContent).set(opt).output('blob').then((pdfBlob: Blob) => {
-        // Télécharger en tant que flux binaire générique (application/octet-stream) pour forcer le navigateur à demander l'autorisation sans ouvrir le PDF automatiquement
-        const forceDownloadBlob = new Blob([pdfBlob], { type: "application/octet-stream" });
-        const url = URL.createObjectURL(forceDownloadBlob);
-        const link = document.createElement("a");
-        link.href = url;
-        link.download = filename;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        URL.revokeObjectURL(url);
-        
-        showToast("Fichier PDF téléchargé avec succès !");
-      }).catch((err: any) => {
-        console.error(err);
-        showToast("Erreur lors de la génération du PDF.");
-      });
-    };
+  const handleAiCoachRequest = async (customPrompt?: string) => {
+    const promptToUse = customPrompt || aiPrompt;
+    if (!promptToUse.trim()) return;
+    
+    setAiLoading(true);
+    setAiResponse(null);
+    setAiPrompt("");
 
-    // @ts-ignore
-    if (window.html2pdf) {
-      runConversion();
-    } else {
-      const script = document.createElement("script");
-      script.src = "https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js";
-      script.onload = () => {
-        runConversion();
-      };
-      document.head.appendChild(script);
+    try {
+      const childUser = selectedChild?.userId ? users.find(u => u.id === selectedChild.userId) : null;
+      const childName = childUser?.name || "Yasmine";
+      const averageGrade = childGrades.length > 0 ? (childGrades.reduce((sum, g) => sum + g.score, 0) / childGrades.length).toFixed(1) : "18.0";
+
+      const systemPromptContext = `Tu es l'assistant IA de SchoolHub, expert en pédagogie et conseiller pour les parents d'élèves. 
+Tu réponds à Khalid Mansour pour sa fille ${childName} (Classe: ${childClass?.name || "Al-Forqane"}, Moyenne : ${averageGrade}/20). 
+Réponds de manière constructive, bienveillante, avec un plan d'action concret en français. Utilise des puces et des titres simples au format Markdown (commençant par ###).`;
+
+      const response = await askSchoolHubIA(promptToUse, systemPromptContext);
+      setAiResponse(response);
+      showToast("Conseil IA généré en direct !");
+    } catch (e) {
+      console.error(e);
+      setAiResponse("Désolé, je rencontre des difficultés de réseau pour appeler Llama 3.3. Veuillez réessayer.");
+    } finally {
+      setAiLoading(false);
     }
   };
 
@@ -700,6 +729,448 @@ export default function ParentDashboard() {
             Télécharger les reçus fiscaux
           </button>
         </div>
+      </div>
+
+      {/* ========================================================= */}
+      {/* CHATGPT FEATURE SUITE (TRANSPORT, CANTEEN, DOCUMENTS, MEETING, AI) */}
+      {/* ========================================================= */}
+      <div 
+        className="p-6 rounded-2xl glass-card flex flex-col gap-6"
+        style={{ border: "1px solid hsl(var(--border))" }}
+      >
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-4 animate-fade-in" style={{ borderBottom: "1px solid hsl(var(--border))" }}>
+          <div>
+            <h3 className="font-extrabold text-sm flex items-center gap-2 uppercase tracking-wider" style={{ color: "hsl(var(--foreground))" }}>
+              <Sparkles className="w-4 h-4 text-purple-400 animate-pulse" />
+              Services Connectés &amp; Communication Parents
+            </h3>
+            <p className="text-[10px] mt-0.5" style={{ color: "hsl(var(--muted-foreground))" }}>
+              Suivez le transport en temps réel, consultez les menus de la cantine, gérez vos documents administratifs et consultez le Coach IA.
+            </p>
+          </div>
+          
+          {/* Tab buttons */}
+          <div className="flex flex-wrap gap-1 p-1 rounded-xl shrink-0" style={{ backgroundColor: "hsl(var(--secondary))" }}>
+            {[
+              { id: "correspondence", name: "Carnet", icon: MessageSquare },
+              { id: "transport", name: "Transport", icon: Bus },
+              { id: "canteen", name: "Cantine", icon: Utensils },
+              { id: "documents", name: "Documents", icon: FolderOpen },
+              { id: "aicoach", name: "Coach IA", icon: Sparkle }
+            ].map((t) => {
+              const Icon = t.icon;
+              const isActive = parentActiveTab === t.id;
+              return (
+                <button
+                  key={t.id}
+                  onClick={() => setParentActiveTab(t.id as any)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all cursor-pointer ${
+                    isActive 
+                      ? "bg-purple-600 text-white shadow-lg shadow-purple-600/10" 
+                      : "hover:text-white"
+                  }`}
+                  style={!isActive ? { color: "hsl(var(--muted-foreground))" } : undefined}
+                >
+                  <Icon className="w-3 h-3" />
+                  {t.name}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Tab contents */}
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={parentActiveTab}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            transition={{ duration: 0.2 }}
+            className="w-full"
+          >
+            {/* 1. CARNET DE CORRESPONDANCE TAB */}
+            {parentActiveTab === "correspondence" && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Meeting Requests Form */}
+                <div className="p-4 rounded-xl flex flex-col gap-4" style={{ backgroundColor: "hsl(var(--secondary))", border: "1px solid hsl(var(--border))" }}>
+                  <h4 className="font-bold text-[10px] flex items-center gap-1.5 uppercase tracking-wide" style={{ color: "hsl(var(--foreground))" }}>
+                    <Calendar className="w-3.5 h-3.5 text-purple-400" />
+                    Demander un RDV avec un Professeur
+                  </h4>
+                  <div className="flex flex-col gap-3 mt-2 text-xs">
+                    <div className="flex flex-col gap-1">
+                      <label className="text-[9px] font-bold" style={{ color: "hsl(var(--muted-foreground))" }}>CHOIX DE L'ENSEIGNANT</label>
+                      <select 
+                        value={meetingTeacherId}
+                        onChange={(e) => setMeetingTeacherId(e.target.value)}
+                        className="p-2 rounded-lg focus:outline-none"
+                        style={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", color: "hsl(var(--foreground))" }}
+                      >
+                        {teachers
+                          .filter(t => t.schoolId === activeSchoolId)
+                          .map(t => {
+                            const u = users.find(usr => usr.id === t.userId);
+                            return (
+                              <option key={t.id} value={t.id}>Pr. {u?.name || t.id} ({t.subjects.join(", ")})</option>
+                            );
+                          })}
+                      </select>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[9px] font-bold" style={{ color: "hsl(var(--muted-foreground))" }}>DATE DE RDV</label>
+                        <input 
+                          type="date"
+                          value={meetingDate}
+                          onChange={(e) => setMeetingDate(e.target.value)}
+                          className="p-2 rounded-lg focus:outline-none"
+                          style={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", color: "hsl(var(--foreground))" }}
+                        />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[9px] font-bold" style={{ color: "hsl(var(--muted-foreground))" }}>HEURE</label>
+                        <input 
+                          type="time"
+                          value={meetingTime}
+                          onChange={(e) => setMeetingTime(e.target.value)}
+                          className="p-2 rounded-lg focus:outline-none"
+                          style={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", color: "hsl(var(--foreground))" }}
+                        />
+                      </div>
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <label className="text-[9px] font-bold" style={{ color: "hsl(var(--muted-foreground))" }}>MOTIF DU RENDEZ-VOUS</label>
+                      <input 
+                        type="text"
+                        value={meetingReason}
+                        onChange={(e) => setMeetingReason(e.target.value)}
+                        className="p-2 rounded-lg focus:outline-none"
+                        style={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", color: "hsl(var(--foreground))" }}
+                      />
+                    </div>
+                    <button
+                      onClick={() => {
+                        requestParentMeeting(meetingTeacherId, meetingDate, meetingTime, meetingReason);
+                        showToast("Demande de rendez-vous enregistrée ! Le professeur sera notifié.");
+                      }}
+                      className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-bold text-[10px] shadow-lg shadow-purple-500/10 cursor-pointer transition-all self-start mt-2"
+                    >
+                      Planifier le RDV
+                    </button>
+                  </div>
+                </div>
+
+                {/* Correspondence log */}
+                <div className="flex flex-col gap-3">
+                  <h4 className="font-bold text-[10px] uppercase tracking-wide" style={{ color: "hsl(var(--foreground))" }}>
+                    Mots de l'école &amp; Signatures
+                  </h4>
+                  <div className="p-3.5 rounded-xl flex flex-col gap-3" style={{ backgroundColor: "hsl(var(--secondary))", border: "1px solid hsl(var(--border))" }}>
+                    <div className="flex justify-between items-start">
+                      <span className="text-[8px] font-bold px-2 py-0.5 rounded bg-purple-500/10 text-purple-400 border border-purple-500/20 uppercase">Info Prof</span>
+                      <span className="text-[8px]" style={{ color: "hsl(var(--muted-foreground))" }}>Il y a 2 jours</span>
+                    </div>
+                    <p className="text-[10px] italic leading-normal" style={{ color: "hsl(var(--foreground))" }}>
+                      "Chers parents, Yasmine a fourni un excellent travail en cours cette semaine. Son investissement en Tajwid est exemplaire et mérite d'être souligné."
+                    </p>
+                    <span className="text-[9px] font-extrabold" style={{ color: "hsl(var(--muted-foreground))" }}>Pr. Sofia Belkacem</span>
+                  </div>
+
+                  <div className="p-3 rounded-xl flex items-center justify-between gap-4" style={{ backgroundColor: "hsl(var(--secondary))", border: "1px solid hsl(var(--border))" }}>
+                    <div className="flex flex-col gap-0.5 min-w-0">
+                      <span className="font-bold text-xs truncate" style={{ color: "hsl(var(--foreground))" }}>Autorisation Sortie Musée</span>
+                      <span className="text-[8px]" style={{ color: "hsl(var(--muted-foreground))" }}>Sortie prévue le 12 Juin 2026</span>
+                    </div>
+                    <button
+                      onClick={() => showToast("Sortie scolaire signée électroniquement avec succès !")}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[9px] font-bold shadow-lg cursor-pointer transition-all shrink-0"
+                    >
+                      <FileCheck className="w-3 h-3" />
+                      Signer
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* 2. TRANSPORT SCOLAIRE TAB */}
+            {parentActiveTab === "transport" && (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="md:col-span-1 p-4 rounded-xl flex flex-col gap-4" style={{ backgroundColor: "hsl(var(--secondary))", border: "1px solid hsl(var(--border))" }}>
+                  <h4 className="font-bold text-[10px] uppercase tracking-wide flex items-center gap-2" style={{ color: "hsl(var(--foreground))" }}>
+                    <Bus className="w-4 h-4 text-purple-400" />
+                    Statut du Bus Scolaire
+                  </h4>
+                  {buses
+                    .filter(b => b.schoolId === activeSchoolId)
+                    .map(b => (
+                      <div key={b.id} className="flex flex-col gap-3 text-xs mt-2">
+                        <div className="flex justify-between items-center">
+                          <span className="font-black text-xs" style={{ color: "hsl(var(--foreground))" }}>{b.busNumber}</span>
+                          <span className={`px-2 py-0.5 rounded text-[8px] font-bold uppercase ${
+                            b.status === "en_route" ? "bg-purple-500/10 text-purple-400 border border-purple-500/20 animate-pulse" : "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                          }`}>
+                            {b.status === "en_route" ? "En route" : "Arrivé"}
+                          </span>
+                        </div>
+                        <div className="flex flex-col gap-1.5 p-3 rounded-lg" style={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))" }}>
+                          <span className="text-[8px] font-bold text-zinc-500 uppercase">CHAUFFEUR</span>
+                          <span className="font-bold" style={{ color: "hsl(var(--foreground))" }}>{b.driverName}</span>
+                          <span className="text-[9px]" style={{ color: "hsl(var(--muted-foreground))" }}>📱 {b.driverPhone}</span>
+                        </div>
+                        <div className="flex flex-col gap-1">
+                          <span className="text-[8px] font-bold text-zinc-500 uppercase">ARRÊT ACTUEL</span>
+                          <span className="font-bold flex items-center gap-1 text-[11px]" style={{ color: "hsl(var(--foreground))" }}>
+                            <MapPin className="w-3.5 h-3.5 text-red-400 shrink-0" />
+                            {b.currentStop}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                </div>
+
+                <div className="md:col-span-2 p-4 rounded-xl flex flex-col gap-4 justify-between" style={{ backgroundColor: "hsl(var(--secondary))", border: "1px solid hsl(var(--border))" }}>
+                  <div className="flex justify-between items-center">
+                    <h4 className="font-bold text-[10px] uppercase tracking-wide flex items-center gap-2" style={{ color: "hsl(var(--foreground))" }}>
+                      <MapPin className="w-4 h-4 text-purple-400" />
+                      Géolocalisation en temps réel (Simulation GPS)
+                    </h4>
+                    <button
+                      onClick={() => setLiveMapVisible(!liveMapVisible)}
+                      className="px-2.5 py-1 bg-purple-600 text-white rounded text-[8px] font-bold cursor-pointer"
+                    >
+                      {liveMapVisible ? "Masquer la Carte" : "Activer le Live GPS"}
+                    </button>
+                  </div>
+                  
+                  {liveMapVisible ? (
+                    <div className="w-full h-44 rounded-xl border border-white/5 relative overflow-hidden flex items-center justify-center bg-zinc-950">
+                      {/* Simulated interactive map radar */}
+                      <div className="absolute inset-0 opacity-20" style={{ 
+                        backgroundImage: "radial-gradient(circle, #8b5cf6 1px, transparent 1px)", 
+                        backgroundSize: "20px 20px" 
+                      }} />
+                      
+                      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-28 h-28 rounded-full border border-purple-500/10 animate-ping" style={{ animationDuration: '4s' }} />
+                      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-14 h-14 rounded-full border border-purple-500/20 animate-ping" style={{ animationDuration: '2s' }} />
+                      
+                      <div className="z-10 flex flex-col items-center gap-2 text-center">
+                        <div className="p-2.5 rounded-full bg-purple-500 text-white animate-bounce shadow-lg shadow-purple-500/30">
+                          <Bus className="w-4 h-4" />
+                        </div>
+                        <span className="text-[10px] font-black tracking-wider uppercase text-purple-400">Position : Place d'Italie</span>
+                        <span className="text-[8px] text-zinc-500">Mise à jour il y a 5 sec. • Vitesse: 32 km/h</span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="w-full h-44 rounded-xl border border-white/5 border-dashed flex flex-col items-center justify-center gap-2 bg-zinc-900/20">
+                      <MapPin className="w-6 h-6 text-zinc-600 animate-pulse" />
+                      <span className="text-[9px] font-bold uppercase tracking-wider text-zinc-500">Le traceur GPS est actif</span>
+                      <p className="text-[8px] text-zinc-600">Activez le Live GPS pour suivre la navette en direct.</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* 3. CANTINE SCOLAIRE TAB */}
+            {parentActiveTab === "canteen" && (
+              <div className="flex flex-col gap-4">
+                <div className="flex justify-between items-center pb-2">
+                  <h4 className="font-bold text-[10px] uppercase tracking-wide flex items-center gap-1.5" style={{ color: "hsl(var(--foreground))" }}>
+                    <Utensils className="w-4 h-4 text-purple-400" />
+                    Menus Hebdomadaires de la Cantine (Bio &amp; Équilibré)
+                  </h4>
+                  <span className="text-[8px] font-bold uppercase bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2 py-0.5 rounded">
+                    Régime enfant : Halal / Sans porc
+                  </span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                  {canteenMenus
+                    .filter(m => m.schoolId === activeSchoolId)
+                    .map(m => (
+                      <div key={m.id} className="p-3.5 rounded-xl flex flex-col gap-2.5 justify-between" style={{ backgroundColor: "hsl(var(--secondary))", border: "1px solid hsl(var(--border))" }}>
+                        <div className="flex justify-between items-center pb-1.5" style={{ borderBottom: "1px solid hsl(var(--border))" }}>
+                          <span className="font-black text-[11px] text-purple-400">{m.day}</span>
+                          {m.allergens.map(a => (
+                            <span key={a} className="text-[7px] font-extrabold bg-red-500/10 text-red-400 border border-red-500/15 px-1.5 py-0.5 rounded">Allergène: {a}</span>
+                          ))}
+                        </div>
+                        <div className="flex flex-col gap-1 text-[10px] font-medium leading-relaxed" style={{ color: "hsl(var(--foreground))" }}>
+                          <span className="text-[8px] text-zinc-500 uppercase font-bold">Entrée</span>
+                          <span className="truncate">{m.starter}</span>
+                          <span className="text-[8px] text-zinc-500 uppercase font-bold mt-1">Plat Principal</span>
+                          <span className="font-bold text-zinc-200">{m.mainCourse}</span>
+                          <span className="text-[8px] text-zinc-500 uppercase font-bold mt-1">Dessert</span>
+                          <span className="truncate">{m.dessert}</span>
+                        </div>
+                        <button
+                          onClick={() => showToast(`Repas du ${m.day} réservé avec succès !`)}
+                          className="w-full text-center mt-2 py-1 bg-purple-600/10 hover:bg-purple-600 text-purple-300 hover:text-white rounded-lg text-[8px] font-bold border border-purple-500/25 transition-all cursor-pointer"
+                        >
+                          Réserver
+                        </button>
+                      </div>
+                    ))}
+                </div>
+              </div>
+            )}
+
+            {/* 4. COFFRE-FORT DOCUMENTAIRE TAB */}
+            {parentActiveTab === "documents" && (
+              <div className="flex flex-col gap-4">
+                <h4 className="font-bold text-[10px] uppercase tracking-wide flex items-center gap-1.5" style={{ color: "hsl(var(--foreground))" }}>
+                  <FolderOpen className="w-4 h-4 text-purple-400" />
+                  Coffre-fort Numérique (Documents Officiels &amp; Vault)
+                </h4>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {documents
+                    .filter(d => d.schoolId === activeSchoolId)
+                    .map(d => (
+                      <div key={d.id} className="p-3.5 rounded-xl flex flex-col justify-between gap-3 transition-all" style={{ backgroundColor: "hsl(var(--secondary))", border: "1px solid hsl(var(--border))" }}>
+                        <div className="flex items-start justify-between">
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <div className="p-2 bg-purple-500/10 text-purple-400 rounded-lg shrink-0">
+                              <FolderOpen className="w-4 h-4" />
+                            </div>
+                            <div className="flex flex-col text-xs min-w-0">
+                              <span className="font-bold truncate" style={{ color: "hsl(var(--foreground))" }}>{d.name}</span>
+                              <span className="text-[8px] mt-0.5 truncate" style={{ color: "hsl(var(--muted-foreground))" }}>{d.size} • Type: {d.type}</span>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex items-center justify-between pt-2" style={{ borderTop: "1px solid hsl(var(--border))" }}>
+                          {d.isSigned !== undefined ? (
+                            <button
+                              disabled={d.isSigned}
+                              onClick={() => {
+                                signDocument(d.id);
+                                showToast("Document signé numériquement !");
+                              }}
+                              className={`px-2.5 py-1.5 rounded-lg text-[8px] font-bold flex items-center gap-1.5 cursor-pointer transition-all ${
+                                d.isSigned 
+                                  ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/15" 
+                                  : "bg-red-500/15 text-red-400 border border-red-500/20"
+                              }`}
+                            >
+                              {d.isSigned ? <Check className="w-3 h-3" /> : <Lock className="w-3 h-3 animate-pulse" />}
+                              {d.isSigned ? "Signé" : "Signature"}
+                            </button>
+                          ) : (
+                            <span className="text-[8px] text-zinc-500 font-bold uppercase">Public</span>
+                          )}
+                          <button
+                            onClick={() => showToast(`Téléchargement du fichier ${d.name} démarré.`)}
+                            className="px-2 py-1 hover:bg-white/10 rounded text-[8px] font-bold cursor-pointer"
+                            style={{ border: "1px solid hsl(var(--border))", color: "hsl(var(--foreground))" }}
+                          >
+                            Télécharger
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              </div>
+            )}
+
+            {/* 5. COACH IA PARENT TAB */}
+            {parentActiveTab === "aicoach" && (
+              <div className="p-4 rounded-xl flex flex-col gap-4 bg-gradient-to-br from-purple-500/5 to-indigo-500/5" style={{ border: "1px solid hsl(var(--border))" }}>
+                <div className="flex items-center justify-between pb-3" style={{ borderBottom: "1px solid hsl(var(--border))" }}>
+                  <div className="flex items-center gap-2">
+                    <div className="p-1.5 bg-purple-600/15 rounded-lg text-purple-400">
+                      <Sparkles className="w-4 h-4 animate-pulse" />
+                    </div>
+                    <div className="flex flex-col">
+                      <span className="font-extrabold text-[11px]" style={{ color: "hsl(var(--foreground))" }}>Assistant Éducatif IA Parent Coach</span>
+                      <span className="text-[8px] text-zinc-500 font-mono">Modèle : Llama 3.2 Fine-Tuned SchoolHub</span>
+                    </div>
+                  </div>
+                  <span className="text-[8px] bg-purple-500/10 font-bold px-2 py-0.5 rounded border border-purple-500/20 uppercase" style={{ color: "hsl(var(--primary))" }}>
+                    IA active
+                  </span>
+                </div>
+
+                <div className="flex flex-col gap-4 text-xs font-normal">
+                  <p className="text-[10px] leading-normal" style={{ color: "hsl(var(--muted-foreground))" }}>
+                    Bonjour Khalid Mansour. Je suis l'IA de SchoolHub, entraînée sur les données de **{selectedChild?.userId ? (users.find(u => u.id === selectedChild.userId)?.name || "Yasmine") : "Yasmine"}**.
+                    Je peux analyser son niveau scolaire actuel et vous recommander des stratégies de révision ou d'aide aux devoirs personnalisées.
+                  </p>
+
+                  {/* Quick actions */}
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    <button
+                      onClick={() => handleAiCoachRequest("Comment puis-je aider mon enfant en Tajwid à la maison ?")}
+                      className="px-3 py-1.5 rounded-lg bg-zinc-950/40 border border-white/5 hover:border-purple-500/30 text-[9px] font-bold cursor-pointer transition-colors"
+                      style={{ color: "hsl(var(--foreground))" }}
+                    >
+                      💡 Aide en Tajwid ?
+                    </button>
+                    <button
+                      onClick={() => handleAiCoachRequest("Propose-moi un planning de révision hebdomadaire")}
+                      className="px-3 py-1.5 rounded-lg bg-zinc-950/40 border border-white/5 hover:border-purple-500/30 text-[9px] font-bold cursor-pointer transition-colors"
+                      style={{ color: "hsl(var(--foreground))" }}
+                    >
+                      📅 Planning de révisions ?
+                    </button>
+                    <button
+                      onClick={() => handleAiCoachRequest("Quels sont les points forts à consolider d'après ses notes ?")}
+                      className="px-3 py-1.5 rounded-lg bg-zinc-950/40 border border-white/5 hover:border-purple-500/30 text-[9px] font-bold cursor-pointer transition-colors"
+                      style={{ color: "hsl(var(--foreground))" }}
+                    >
+                      📊 Points forts / faibles ?
+                    </button>
+                  </div>
+
+                  {/* Response section */}
+                  {aiLoading ? (
+                    <div className="p-4 rounded-xl flex items-center justify-center gap-2 bg-zinc-950/30 border border-white/5">
+                      <Loader2 className="w-3.5 h-3.5 text-purple-400 animate-spin" />
+                      <span className="text-[8px] text-zinc-500 font-bold uppercase">Analyse IA en cours...</span>
+                    </div>
+                  ) : aiResponse ? (
+                    <motion.div
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      className="p-3.5 rounded-xl bg-zinc-950/40 border border-purple-500/10 leading-relaxed font-sans text-[10px] flex flex-col gap-2"
+                    >
+                      {/* Parse Markdown-like simple layout */}
+                      {aiResponse.split("\n\n").map((para, pIdx) => {
+                        if (para.startsWith("###")) {
+                          return <h4 key={pIdx} className="font-extrabold text-[10px] text-purple-400 mt-1">{para.replace("###", "").trim()}</h4>;
+                        }
+                        if (para.startsWith("**")) {
+                          return <p key={pIdx} className="text-zinc-300 font-medium">{para}</p>;
+                        }
+                        return <p key={pIdx} className="text-zinc-400 leading-normal font-normal">{para}</p>;
+                      })}
+                    </motion.div>
+                  ) : null}
+
+                  {/* Input form */}
+                  <div className="flex gap-2 mt-2">
+                    <input
+                      type="text"
+                      placeholder="Posez une question sur la scolarité de votre enfant..."
+                      value={aiPrompt}
+                      onChange={(e) => setAiPrompt(e.target.value)}
+                      onKeyDown={(e) => e.key === "Enter" && handleAiCoachRequest()}
+                      className="flex-1 px-3.5 py-2 rounded-xl text-[10px] focus:outline-none focus:border-purple-500/30"
+                      style={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", color: "hsl(var(--foreground))" }}
+                    />
+                    <button
+                      onClick={() => handleAiCoachRequest()}
+                      className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl font-bold text-[10px] shadow-lg shadow-purple-500/15 cursor-pointer transition-colors"
+                    >
+                      Poser
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </motion.div>
+        </AnimatePresence>
       </div>
 
       {/* DIRECT MESSAGE QUICK CARD */}

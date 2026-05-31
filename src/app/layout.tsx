@@ -17,6 +17,9 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "SchoolHub - Plateforme Scolaire SaaS Tout-en-Un",
   description: "Gérez votre école classique, privée, ou coranique avec la suite d'outils scolaires la plus moderne et fluide en temps réel.",
+  icons: {
+    icon: "/favicon.png",
+  },
 };
 
 export default function RootLayout({

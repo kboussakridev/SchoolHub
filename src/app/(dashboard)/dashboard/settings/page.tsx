@@ -41,15 +41,93 @@ export default function SettingsPage() {
 
   const handleDownloadInvoice = (invoiceId: string) => {
     setDownloadingInvoice(invoiceId);
-    setTimeout(() => {
+    
+    const planName = activeSchool?.plan || "Basic";
+    const planAmount = planName === "basic" ? "49,00 €" : planName === "pro" ? "129,00 €" : "499,00 €";
+    
+    const invoiceContent = `
+===================================================================
+                  FACTURE STRIPE - SCHOOLHUB SAAS
+===================================================================
+Facture N°   : ${invoiceId}
+Date         : 31 Mai 2026
+Etablissement: ${schoolName}
+Adresse      : ${schoolAddress}
+Statut       : PAYE via Stripe
+
+PRODUITS & SERVICES FACTURES :
+-------------------------------------------------------------------
+- Abonnement SchoolHub SaaS - Plan ${planName.toUpperCase()}
+  Période : Du 01/05/2026 au 31/05/2026
+  Quota : Jusqu'à ${activeSchool?.maxStudentsQuota || 50} élèves
+  
+-------------------------------------------------------------------
+TOTAL PAYE (TTC) : ${planAmount}
+-------------------------------------------------------------------
+Moyen de Paiement : Carte Visa (se terminant par 4242)
+Transaction ID     : ch_stripe_3M2t8L2eZvKYlo2C2x9Bq1sZ
+
+Merci pour votre abonnement ! Si vous avez des questions, 
+contactez notre support à support@schoolhub.dev.
+===================================================================`;
+
+    const formattedContent = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Facture-${invoiceId}</title>
+  <style>
+    body { 
+      background: #ffffff; 
+      color: #0f172a; 
+      margin: 0; 
+      padding: 40px; 
+      font-family: monospace; 
+    }
+    pre { 
+      white-space: pre-wrap; 
+      font-size: 13px; 
+      line-height: 1.6; 
+      border: 1px solid #e2e8f0;
+      border-radius: 12px;
+      padding: 30px;
+      background: #ffffff;
+      max-width: 800px;
+      margin: 0 auto;
+    }
+    @media print {
+      body { padding: 0; }
+      pre { border: none; padding: 0; }
+    }
+  </style>
+</head>
+<body>
+  <pre>${invoiceContent}</pre>
+  <script>
+    // Trigger browser print dialog on page load
+    window.onload = function() {
+      setTimeout(function() {
+        window.print();
+      }, 350);
+    };
+  </script>
+</body>
+</html>`;
+
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      setToastMessage("Erreur : Veuillez autoriser les fenêtres pop-up.");
+      setTimeout(() => setToastMessage(null), 3500);
       setDownloadingInvoice(null);
-      // Simulate file download
-      const link = document.createElement("a");
-      link.href = "#";
-      link.setAttribute("download", `Facture-${invoiceId}.pdf`);
-      document.body.appendChild(link);
-      alert(`Téléchargement de la facture ${invoiceId}.pdf démarré avec succès !`);
-    }, 1200);
+      return;
+    }
+
+    printWindow.document.write(formattedContent);
+    printWindow.document.close();
+    
+    setDownloadingInvoice(null);
+    setToastMessage("Facture prête pour impression / sauvegarde !");
+    setTimeout(() => setToastMessage(null), 3500);
   };
 
   const handleUpgradePlan = (plan: "basic" | "pro" | "enterprise") => {

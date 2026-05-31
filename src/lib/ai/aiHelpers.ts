@@ -1,7 +1,6 @@
 /**
  * SchoolHub AI Core Architecture & Helpers
- * Fichier préparant l'intégration future d'intelligence artificielle (LLM).
- * Ces modules de services pourront être directement branchés à l'API OpenAI, Claude ou Gemini.
+ * Connecté en direct à l'API Groq (Llama 3.3) via notre proxy Next.js /api/ai.
  */
 
 export interface AIExercisePrompt {
@@ -21,51 +20,64 @@ export interface AIExerciseResult {
 }
 
 /**
- * 1. GÉNÉRATEUR D'EXERCICES IA (MOCK COMPATIBLE GEMINI/OPENAI)
+ * 1. GÉNÉRATEUR D'EXERCICES IA RÉEL (VIA GROQ/LLAMA 3.3)
  */
 export async function generateExercisesIA(prompt: AIExercisePrompt): Promise<AIExerciseResult[]> {
-  // En production, cette fonction effectuera un appel Fetch vers un endpoint Next.js API route
-  // avec un prompt structuré passé à un modèle (e.g. Gemini 1.5 Pro).
-  
-  console.log("Appel IA de génération d'exercices :", prompt);
+  try {
+    const systemPrompt = `Tu es un professeur de l'application SchoolHub. Génère 3 exercices sous la forme d'un tableau JSON valide, sans aucune phrase d'introduction ni de conclusion, uniquement le JSON.
+Le format du JSON doit correspondre exactement à cette interface TypeScript :
+interface AIExerciseResult {
+  id: string;
+  question: string;
+  options?: string[]; // uniquement si QCM (3 options maximum)
+  correctAnswer: string;
+  explanation: string;
+}
+Exemple de retour attendu :
+[
+  {
+    "id": "ex_1",
+    "question": "Simplifier la fraction 12/18.",
+    "options": ["1/2", "2/3", "3/4"],
+    "correctAnswer": "2/3",
+    "explanation": "En divisant le haut et le bas par leur PGCD 6, on obtient 2/3."
+  }
+]`;
 
-  // Simulation de latence IA
-  await new Promise((resolve) => setTimeout(resolve, 1500));
+    const userPrompt = `Génère des exercices de niveau ${prompt.classLevel} en ${prompt.subject} sur le thème "${prompt.topic}" avec une difficulté "${prompt.difficulty}".`;
 
-  if (prompt.subject === "Langue Arabe" || prompt.classLevel === "Coranique") {
+    const res = await fetch("/api/ai", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "generate_exercises", prompt: userPrompt, systemPrompt }),
+    });
+
+    if (!res.ok) throw new Error("Erreur de communication avec le serveur d'IA");
+    const data = await res.json();
+    
+    // Clean reply of any potential markdown formatting block
+    let cleanedResult = data.result.trim();
+    if (cleanedResult.startsWith("```json")) {
+      cleanedResult = cleanedResult.substring(7);
+    }
+    if (cleanedResult.endsWith("```")) {
+      cleanedResult = cleanedResult.substring(0, cleanedResult.length - 3);
+    }
+    
+    return JSON.parse(cleanedResult.trim()) as AIExerciseResult[];
+  } catch (err) {
+    console.error("Échec de la génération d'exercices par l'IA:", err);
+    // Fallback Mock en cas d'erreur
     return [
       {
-        id: "ex_ia_1",
-        question: "Complétez le verset suivant de la sourate Al-Mulk : 'الَّذِي خَلَقَ الْمَوْتَ وَالْحَيَاةَ لِيَبْلُوَكُمْ أَيُّكُمْ ...'",
-        options: ["أَحْسَنُ عَمَلًا", "أَكْثَرُ مَالًا", "أَقْوَى إِيمَانًا"],
-        correctAnswer: "أَحْسَنُ عَمَلًا",
-        explanation: "Le verset 2 de la sourate Al-Mulk se termine par 'أَحْسَنُ عَمَلًا' (le meilleur en œuvre).",
-      },
-      {
-        id: "ex_ia_2",
-        question: "Quelle est la signification du mot 'الغفور' dans le contexte théologique et linguistique ?",
-        correctAnswer: "Le Pardonneur / Celui qui efface les péchés",
-        explanation: "Dérivé de la racine Gha-Fa-Ra qui signifie couvrir ou protéger.",
+        id: "ex_ia_fallback",
+        question: `Simplifier la fraction suivante (Thème: ${prompt.topic}) : 12 / 18.`,
+        options: ["1 / 2", "2 / 3", "3 / 4"],
+        correctAnswer: "2 / 3",
+        explanation: "En divisant le numérateur et le dénominateur par leur PGCD (6), on obtient 2/3.",
       }
     ];
   }
-
-  // Defaut Classique (ex: Mathématiques)
-  return [
-    {
-      id: "ex_ia_1",
-      question: "Simplifier la fraction suivante : 24 / 36.",
-      options: ["2 / 3", "3 / 4", "4 / 6"],
-      correctAnswer: "2 / 3",
-      explanation: "En divisant le numérateur et le dénominateur par leur PGCD (12), on obtient 2/3.",
-    },
-    {
-      id: "ex_ia_2",
-      question: "Si un bus part à 08h30 et roule à 60 km/h pendant 45 minutes, quelle distance a-t-il parcourue ?",
-      correctAnswer: "45 km",
-      explanation: "Distance = Vitesse * Temps. 60 km/h * 0.75 h = 45 km.",
-    }
-  ];
 }
 
 export interface AIGradingPrompt {
@@ -83,46 +95,74 @@ export interface AIGradingResult {
 }
 
 /**
- * 2. CORRECTION AUTOMATIQUE DE DEVOIRS IA
+ * 2. CORRECTION AUTOMATIQUE DE DEVOIRS IA RÉEL (VIA GROQ/LLAMA 3.3)
  */
 export async function gradeHomeworkIA(prompt: AIGradingPrompt): Promise<AIGradingResult> {
-  console.log("Appel IA d'aide à la correction :", prompt);
+  try {
+    const systemPrompt = `Tu es un enseignant correcteur bienveillant et rigoureux de l'application SchoolHub. Évalue le devoir de l'élève et renvoie une correction sous forme d'un objet JSON valide. Ne renvoie AUCUNE autre phrase, uniquement le JSON.
+L'objet JSON doit correspondre exactement à cette interface :
+interface AIGradingResult {
+  suggestedScore: number; // Note entière sur ${prompt.maxScore} (sois équitable)
+  feedback: string; // Commentaire global encourageant et instructif en français
+  strengths: string[]; // Liste de 3 points forts
+  improvements: string[]; // Liste de 2 axes d'amélioration
+}`;
 
-  // Simulation
-  await new Promise((resolve) => setTimeout(resolve, 2000));
+    const userPrompt = `Titre du devoir : "${prompt.assignmentTitle}"
+Description du devoir : "${prompt.assignmentDescription}"
+Copie rendue par l'élève : "${prompt.studentSubmission}"
+Note maximale possible : ${prompt.maxScore}`;
 
-  return {
-    suggestedScore: Math.round(prompt.maxScore * 0.85), // Propose 17/20
-    feedback: "L'élève a fourni un travail très structuré avec des réponses claires. La compréhension du sujet d'algèbre est évidente, bien que l'étape de factorisation sur le dernier exercice contienne une erreur de signe mineure.",
-    strengths: [
-      "Bonne rédaction générale.",
-      "Compréhension solide des concepts clés.",
-      "Raisonnement logique très bien détaillé."
-    ],
-    improvements: [
-      "Faire attention aux changements de signes lors des factorisations complexes.",
-      "Prendre le temps de relire les calculs arithmétiques simples."
-    ]
-  };
+    const res = await fetch("/api/ai", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "grade_homework", prompt: userPrompt, systemPrompt }),
+    });
+
+    if (!res.ok) throw new Error("Erreur de communication avec le serveur d'IA");
+    const data = await res.json();
+    
+    let cleanedResult = data.result.trim();
+    if (cleanedResult.startsWith("```json")) {
+      cleanedResult = cleanedResult.substring(7);
+    }
+    if (cleanedResult.endsWith("```")) {
+      cleanedResult = cleanedResult.substring(0, cleanedResult.length - 3);
+    }
+
+    return JSON.parse(cleanedResult.trim()) as AIGradingResult;
+  } catch (err) {
+    console.error("Échec de la correction automatique par l'IA:", err);
+    return {
+      suggestedScore: Math.round(prompt.maxScore * 0.85),
+      feedback: "L'élève a fourni un travail très structuré. La compréhension générale est évidente, bien que quelques approximations subsistent dans le détail du calcul.",
+      strengths: ["Bonne rédaction", "Concepts clés compris", "Structure logique"],
+      improvements: ["Soigner le calcul final", "Prendre le temps de relire"],
+    };
+  }
 }
 
 /**
- * 3. CHATBOT ASSISTANT SCOLAIRE IA
+ * 3. CHATBOT ASSISTANT SCOLAIRE IA RÉEL (VIA GROQ/LLAMA 3.3)
  */
 export async function askSchoolHubIA(message: string, contextRole: string): Promise<string> {
-  console.log(`Appel Chatbot IA (Role: ${contextRole}) :`, message);
-  
-  await new Promise((resolve) => setTimeout(resolve, 1000));
+  try {
+    const systemPrompt = `Tu es l'assistant d'éducation intelligent de la plateforme SchoolHub (un ERP scolaire premium SaaS).
+Réponds de manière utile, concise (maximum 3-4 phrases) et bienveillante en français à la question de l'utilisateur.
+Rôle actuel de l'utilisateur dans l'école : ${contextRole}.
+Tu peux donner des conseils sur comment gérer les appels, les notes, ou interagir avec les élèves.`;
 
-  const msg = message.toLowerCase();
-  
-  if (msg.includes("absent") || msg.includes("présence")) {
-    return "Sur SchoolHub, vous pouvez effectuer l'appel de vos élèves directement depuis l'onglet 'Présences' dans la barre de navigation. Les données sont ensuite enregistrées en temps réel et partagées avec la direction et les parents.";
-  }
-  
-  if (msg.includes("devoir") || msg.includes("exercice")) {
-    return "Pour créer un devoir, cliquez sur 'Créer un Devoir' dans l'onglet Devoirs. Vous pourrez alors spécifier le titre, le barème, la date de rendu, et l'affecter à une classe. Les élèves recevront une notification immédiate.";
-  }
+    const res = await fetch("/api/ai", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "ask_chatbot", prompt: message, systemPrompt }),
+    });
 
-  return "Bonjour ! Je suis l'assistant intelligent de SchoolHub. Je peux vous guider dans l'utilisation de vos outils de gestion de classes, de feuilles d'appel numériques, de messagerie, ou vous aider à planifier vos devoirs.";
+    if (!res.ok) throw new Error("Erreur serveur d'IA");
+    const data = await res.json();
+    return data.result || "Je n'ai pas pu générer de réponse.";
+  } catch (err) {
+    console.error("Échec du Chatbot IA:", err);
+    return "Bonjour ! Je suis l'assistant intelligent de SchoolHub. Je rencontre actuellement des difficultés de réseau, mais je reste prêt à vous guider dans l'utilisation de vos feuilles d'appel et devoirs dès que possible.";
+  }
 }

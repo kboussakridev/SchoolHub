@@ -51,12 +51,14 @@ export default function LandingPage() {
         }}
       >
         <div className="flex items-center gap-3">
-          <div
-            className="w-9 h-9 rounded-xl flex items-center justify-center shadow-lg"
-            style={{ background: "linear-gradient(135deg, hsl(var(--primary)), hsl(var(--primary-dark)))" }}
-          >
-            <Sparkles className="w-5 h-5" style={{ color: "hsl(var(--primary-foreground))" }} />
-          </div>
+          <img
+            src="/logo.png"
+            alt="SchoolHub Logo"
+            className="w-9 h-9 rounded-xl shadow-lg shrink-0 border border-white/10 object-cover"
+            style={{
+              boxShadow: "0 4px 12px rgba(16, 185, 129, 0.15)",
+            }}
+          />
           <span className="font-extrabold text-lg tracking-wider gradient-text">SchoolHub</span>
         </div>
 

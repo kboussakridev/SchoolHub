@@ -5,7 +5,7 @@ import { useSchoolHub } from "../providers/SchoolHubProvider";
 import { motion, AnimatePresence } from "framer-motion";
 import { 
   Globe, Landmark, CreditCard, Users, ClipboardCheck, Play, Pause, 
-  ArrowUpRight, ShieldCheck, Database, Calendar, TrendingUp, Sparkles 
+  ArrowUpRight, ShieldCheck, Database, Calendar, TrendingUp, Sparkles, Plus, X, Trash2 
 } from "lucide-react";
 
 export default function SuperAdminDashboard() {
@@ -14,12 +14,53 @@ export default function SuperAdminDashboard() {
     auditLogs, 
     toggleSchoolStatus, 
     changeSchoolPlan, 
-    getSuperAdminStats 
+    getSuperAdminStats,
+    addSchool,
+    archiveSchool 
   } = useSchoolHub();
 
   const stats = getSuperAdminStats();
   const [mounted, setMounted] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  // Split schools
+  const activeSchools = schools.filter((s) => s.status !== "archived");
+  const archivedSchools = schools.filter((s) => s.status === "archived");
+
+  // New School Contract Form States
+  const [showAddSchoolForm, setShowAddSchoolForm] = useState(false);
+  const [newSchoolName, setNewSchoolName] = useState("");
+  const [newSchoolSlug, setNewSchoolSlug] = useState("");
+  const [newSchoolPlan, setNewSchoolPlan] = useState<"basic" | "pro" | "enterprise">("basic");
+  const [newSchoolAddress, setNewSchoolAddress] = useState("");
+  const [newSchoolSystem, setNewSchoolSystem] = useState("Système Français");
+
+  const handleCreateSchool = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newSchoolName.trim() || !newSchoolSlug.trim()) {
+      showToast("Veuillez remplir le nom et le slug d'accès.");
+      return;
+    }
+
+    const normalizedSlug = newSchoolSlug.toLowerCase().replace(/[^a-z0-9-_]/g, "");
+
+    addSchool({
+      name: newSchoolName,
+      slug: normalizedSlug,
+      plan: newSchoolPlan,
+      address: newSchoolAddress || undefined,
+      primarySystem: newSchoolSystem || undefined
+    });
+
+    setNewSchoolName("");
+    setNewSchoolSlug("");
+    setNewSchoolPlan("basic");
+    setNewSchoolAddress("");
+    setNewSchoolSystem("Système Français");
+    setShowAddSchoolForm(false);
+    
+    showToast("Contrat d'établissement enregistré avec succès !");
+  };
 
   React.useEffect(() => {
     setMounted(true);
@@ -120,18 +161,127 @@ export default function SuperAdminDashboard() {
         {/* SCHOOLS SUBSCRIPTION MANAGER (2 COLS) */}
         <div className="lg:col-span-2 p-6 rounded-2xl glass-card flex flex-col justify-between" style={{ border: "1px solid hsl(var(--border))" }}>
           <div>
-            <div className="pb-4 mb-5 flex items-center justify-between" style={{ borderBottom: "1px solid hsl(var(--border))" }}>
+            <div className="pb-4 mb-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3" style={{ borderBottom: "1px solid hsl(var(--border))" }}>
               <div>
                 <h3 className="font-bold text-base" style={{ color: "hsl(var(--foreground))" }}>Gestionnaire des Abonnements Écoles</h3>
                 <p className="text-xs mt-0.5" style={{ color: "hsl(var(--muted-foreground))" }}>Activez, suspendez ou mettez à niveau les licences d'écoles (Stripe Webhooks).</p>
               </div>
-              <span className="text-[10px] bg-rose-500/10 border border-rose-500/25 text-rose-300 font-bold px-2.5 py-0.5 rounded-full">
-                {schools.length} Tenants enregistrés
-              </span>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  onClick={() => setShowAddSchoolForm(!showAddSchoolForm)}
+                  className="px-3 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-[10px] font-black text-white flex items-center gap-1 cursor-pointer transition-all shadow-lg shadow-rose-600/15"
+                >
+                  {showAddSchoolForm ? <X className="w-3.5 h-3.5" /> : <Plus className="w-3.5 h-3.5" />}
+                  {showAddSchoolForm ? "Fermer" : "Nouveau Contrat"}
+                </button>
+                <span className="text-[10px] bg-rose-500/10 border border-rose-500/25 text-rose-300 font-bold px-2.5 py-1.5 rounded-full">
+                  {schools.length} Enregistrés
+                </span>
+              </div>
             </div>
 
+            {/* Collapsible New School Contract Form */}
+            <AnimatePresence>
+              {showAddSchoolForm && (
+                <motion.form
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: "auto" }}
+                  exit={{ opacity: 0, height: 0 }}
+                  onSubmit={handleCreateSchool}
+                  className="p-4 rounded-xl mb-6 flex flex-col gap-3.5 bg-rose-500/5 border border-rose-500/15 overflow-hidden"
+                >
+                  <span className="text-[10px] font-black uppercase text-rose-400 tracking-wider">Signer un nouveau contrat d'établissement</span>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                    <div className="flex flex-col gap-1.5 text-left">
+                      <label className="text-[9px] font-bold text-zinc-400 uppercase">Nom de l'établissement</label>
+                      <input
+                        type="text"
+                        value={newSchoolName}
+                        onChange={(e) => {
+                          setNewSchoolName(e.target.value);
+                          // Auto generate slug
+                          setNewSchoolSlug(e.target.value.toLowerCase().replace(/[^a-z0-9]/g, "-").replace(/-+/g, "-"));
+                        }}
+                        placeholder="ex: Académie Al-Forqane"
+                        className="p-2.5 rounded-xl border text-xs focus:outline-none focus:border-rose-500/40"
+                        style={{ backgroundColor: "hsl(var(--secondary))", borderColor: "hsl(var(--border))", color: "hsl(var(--foreground))" }}
+                        required
+                      />
+                    </div>
+                    <div className="flex flex-col gap-1.5 text-left">
+                      <label className="text-[9px] font-bold text-zinc-400 uppercase">Slug d'accès unique</label>
+                      <input
+                        type="text"
+                        value={newSchoolSlug}
+                        onChange={(e) => setNewSchoolSlug(e.target.value)}
+                        placeholder="ex: al-forqane"
+                        className="p-2.5 rounded-xl border text-xs focus:outline-none focus:border-rose-500/40 font-mono"
+                        style={{ backgroundColor: "hsl(var(--secondary))", borderColor: "hsl(var(--border))", color: "hsl(var(--foreground))" }}
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+                    <div className="flex flex-col gap-1.5 text-left">
+                      <label className="text-[9px] font-bold text-zinc-400 uppercase">Forfait Initial (SaaS)</label>
+                      <select
+                        value={newSchoolPlan}
+                        onChange={(e) => setNewSchoolPlan(e.target.value as any)}
+                        className="p-2.5 rounded-xl border text-xs focus:outline-none focus:border-rose-500/40 cursor-pointer"
+                        style={{ backgroundColor: "hsl(var(--secondary))", borderColor: "hsl(var(--border))", color: "hsl(var(--foreground))" }}
+                      >
+                        <option value="basic">Basic (49€/mois - Quota 50)</option>
+                        <option value="pro">Pro (129€/mois - Quota 300)</option>
+                        <option value="enterprise">Enterprise (499€/mois - Quota Illimité)</option>
+                      </select>
+                    </div>
+                    <div className="flex flex-col gap-1.5 text-left">
+                      <label className="text-[9px] font-bold text-zinc-400 uppercase">Adresse Physique</label>
+                      <input
+                        type="text"
+                        value={newSchoolAddress}
+                        onChange={(e) => setNewSchoolAddress(e.target.value)}
+                        placeholder="ex: 15 Avenue du Savoir, Paris"
+                        className="p-2.5 rounded-xl border text-xs focus:outline-none focus:border-rose-500/40"
+                        style={{ backgroundColor: "hsl(var(--secondary))", borderColor: "hsl(var(--border))", color: "hsl(var(--foreground))" }}
+                      />
+                    </div>
+                    <div className="flex flex-col gap-1.5 text-left">
+                      <label className="text-[9px] font-bold text-zinc-400 uppercase">Système d'Enseignement</label>
+                      <input
+                        type="text"
+                        value={newSchoolSystem}
+                        onChange={(e) => setNewSchoolSystem(e.target.value)}
+                        placeholder="ex: Académique Français"
+                        className="p-2.5 rounded-xl border text-xs focus:outline-none focus:border-rose-500/40"
+                        style={{ backgroundColor: "hsl(var(--secondary))", borderColor: "hsl(var(--border))", color: "hsl(var(--foreground))" }}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end gap-2 pt-2" style={{ borderTop: "1px solid hsl(var(--border) / 0.4)" }}>
+                    <button
+                      type="button"
+                      onClick={() => setShowAddSchoolForm(false)}
+                      className="px-4 py-2 rounded-xl text-[10px] font-bold cursor-pointer transition-colors"
+                      style={{ backgroundColor: "hsl(var(--secondary))", border: "1px solid hsl(var(--border))", color: "hsl(var(--muted-foreground))" }}
+                    >
+                      Annuler
+                    </button>
+                    <button
+                      type="submit"
+                      className="px-4 py-2 rounded-xl text-[10px] font-black text-white bg-rose-600 hover:bg-rose-700 cursor-pointer transition-all"
+                    >
+                      Créer le Contrat
+                    </button>
+                  </div>
+                </motion.form>
+              )}
+            </AnimatePresence>
+
             <div className="flex flex-col gap-4">
-              {schools.map((school) => {
+              {activeSchools.map((school) => {
                 const isActive = school.status === "active";
                 const isBasic = school.plan === "basic";
                 const isPro = school.plan === "pro";
@@ -166,7 +316,7 @@ export default function SuperAdminDashboard() {
                         </span>
                       </div>
 
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2.5">
                         {/* Plan level selection */}
                         <select
                           value={school.plan}
@@ -191,8 +341,21 @@ export default function SuperAdminDashboard() {
                               ? "bg-red-500/10 hover:bg-red-500/20 text-red-400 border-red-500/20"
                               : "bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border-emerald-500/20"
                           }`}
+                          title={isActive ? "Suspendre l'établissement" : "Activer l'établissement"}
                         >
                           {isActive ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
+                        </button>
+
+                        {/* Archive control */}
+                        <button
+                          onClick={() => {
+                            archiveSchool(school.id);
+                            showToast(`L'établissement ${school.name} a été archivé.`);
+                          }}
+                          className="p-1.5 border border-amber-500/20 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 rounded-lg transition-colors cursor-pointer flex items-center justify-center"
+                          title="Archiver l'établissement"
+                        >
+                          <Trash2 className="w-4 h-4" />
                         </button>
                       </div>
                     </div>
@@ -209,6 +372,38 @@ export default function SuperAdminDashboard() {
                 );
               })}
             </div>
+
+            {/* Archived schools list block */}
+            {archivedSchools.length > 0 && (
+              <div className="mt-8 pt-6" style={{ borderTop: "1px dashed hsl(var(--border))" }}>
+                <span className="text-[10px] font-black text-amber-500/70 uppercase tracking-wider block mb-3.5">Établissements Archivés ({archivedSchools.length})</span>
+                <div className="flex flex-col gap-3">
+                  {archivedSchools.map((sch) => (
+                    <div 
+                      key={sch.id} 
+                      className="p-3.5 rounded-xl flex items-center justify-between transition-colors bg-zinc-950/30 border border-white/5 hover:border-white/10"
+                    >
+                      <div className="text-left">
+                        <span className="font-extrabold text-xs text-zinc-400 flex items-center gap-2">
+                          {sch.name}
+                          <span className="text-[8px] bg-amber-500/10 text-amber-400 font-bold px-1.5 py-0.5 rounded border border-amber-500/20 uppercase">Archivé</span>
+                        </span>
+                        <span className="text-[9px] text-zinc-500 font-mono block mt-0.5">Slug: /{sch.slug} • Créé le {mounted ? new Date(sch.createdAt).toLocaleDateString("fr-FR") : "--/--/----"}</span>
+                      </div>
+                      <button
+                        onClick={() => {
+                          toggleSchoolStatus(sch.id);
+                          showToast(`L'établissement ${sch.name} a été restauré et réactivé.`);
+                        }}
+                        className="px-3 py-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/25 text-[9px] font-black text-emerald-400 cursor-pointer transition-colors"
+                      >
+                        Restaurer / Activer
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </div>
 

@@ -7,7 +7,7 @@ export interface MockSchool {
   name: string;
   slug: string;
   plan: "basic" | "pro" | "enterprise";
-  status: "active" | "suspended" | "past_due";
+  status: "active" | "suspended" | "past_due" | "archived";
   stripeCustomerId?: string;
   stripeSubscriptionId?: string;
   maxStudentsQuota: number;
@@ -56,6 +56,11 @@ export interface MockTeacher {
   userId: string;
   subjects: string[];
   availability: string[];
+  phone?: string;
+  bio?: string;
+  contractType?: "titulaire" | "vacataire" | "contractuel";
+  hourlyRate?: number;
+  assignedClassIds?: string[];
 }
 
 export interface MockParent {
@@ -731,3 +736,225 @@ for (let i = 1; i <= 110; i++) {
     });
   }
 }
+
+// ==========================================
+// 4. CHATGPT BONUS MODULES MOCK DATA & TYPAGES
+// ==========================================
+
+export interface MockBus {
+  id: string;
+  schoolId: string;
+  busNumber: string;
+  driverName: string;
+  driverPhone: string;
+  route: string;
+  status: "inactive" | "en_route" | "arrived";
+  currentStop: string;
+}
+
+export interface MockCanteenMenu {
+  id: string;
+  schoolId: string;
+  day: string;
+  starter: string;
+  mainCourse: string;
+  dessert: string;
+  allergens: string[];
+}
+
+export interface MockNotification {
+  id: string;
+  schoolId: string;
+  userId: string;
+  title: string;
+  message: string;
+  read: boolean;
+  createdAt: number;
+}
+
+export interface MockDocumentVault {
+  id: string;
+  schoolId: string;
+  studentId: string;
+  name: string;
+  type: "report_card" | "invoice_receipt" | "contract" | "certificate" | "authorization";
+  size: string;
+  createdAt: number;
+  downloadUrl: string;
+  isSigned?: boolean;
+}
+
+export interface MockRolePermissions {
+  role: "super_admin" | "school_admin" | "teacher" | "parent" | "student";
+  permissions: { action: string; description: string; allowed: boolean }[];
+}
+
+// Data seeds
+export const mockBuses: MockBus[] = [
+  {
+    id: "bus_1",
+    schoolId: "school_alqalam",
+    busNumber: "Ligne Violette (Bus #04)",
+    driverName: "Mourad Alami",
+    driverPhone: "+33 6 42 12 34 56",
+    route: "Gare de Lyon -> Place d'Italie -> Bastille -> Ecole",
+    status: "en_route",
+    currentStop: "Place d'Italie",
+  },
+  {
+    id: "bus_2",
+    schoolId: "school_condorcet",
+    busNumber: "Ligne Verte (Bus #12)",
+    driverName: "Stéphane Legrand",
+    driverPhone: "+33 6 55 98 76 54",
+    route: "Nation -> République -> Montmartre -> Ecole",
+    status: "arrived",
+    currentStop: "Ecole (Arrivé)",
+  }
+];
+
+export const mockCanteenMenus: MockCanteenMenu[] = [
+  {
+    id: "menu_1",
+    schoolId: "school_alqalam",
+    day: "Lundi",
+    starter: "Salade de tomates et feta au basilic",
+    mainCourse: "Tagine de poulet aux citrons confits et olives, semoule bio",
+    dessert: "Salade de fruits frais à la menthe",
+    allergens: ["Gluten"],
+  },
+  {
+    id: "menu_2",
+    schoolId: "school_alqalam",
+    day: "Mardi",
+    starter: "Soupe veloutée de lentilles corail",
+    mainCourse: "Filet de colin sauce safranée, riz basmati",
+    dessert: "Crème dessert maison à la fleur d'oranger",
+    allergens: ["Poisson", "Lactose"],
+  },
+  {
+    id: "menu_3",
+    schoolId: "school_alqalam",
+    day: "Jeudi",
+    starter: "Carottes râpées bio à l'orange",
+    mainCourse: "Lasagnes végétariennes aux épinards et ricotta",
+    dessert: "Tarte fine aux pommes",
+    allergens: ["Gluten", "Lactose"],
+  },
+  {
+    id: "menu_4",
+    schoolId: "school_alqalam",
+    day: "Vendredi",
+    starter: "Houmous maison et pain pita chaud",
+    mainCourse: "Couscous royal aux légumes et boulettes végétales",
+    dessert: "Dattes Medjool et thé à la menthe",
+    allergens: ["Gluten", "Sésame"],
+  }
+];
+
+export const mockNotifications: MockNotification[] = [
+  {
+    id: "notif_1",
+    schoolId: "school_alqalam",
+    userId: "user_parent_1",
+    title: "Nouveau devoir de Tajwid",
+    message: "Le Pr. Sofia Belkacem a publié un nouveau devoir : 'Sourate An-Naba : Versets 1 à 20'. Échéance le 28/05/2026.",
+    read: false,
+    createdAt: Date.now() - 3600000 * 2,
+  },
+  {
+    id: "notif_2",
+    schoolId: "school_alqalam",
+    userId: "user_parent_1",
+    title: "Appel de présence validé",
+    message: "Yasmine Mansour a été déclarée PRÉSENTE aujourd'hui à 09:12 par l'enseignant.",
+    read: true,
+    createdAt: Date.now() - 3600000 * 6,
+  },
+  {
+    id: "notif_3",
+    schoolId: "school_alqalam",
+    userId: "user_parent_1",
+    title: "Facture Stripe disponible",
+    message: "Votre facture mensuelle Stripe #SH-2026-05 a été émise et payée avec succès.",
+    read: true,
+    createdAt: Date.now() - 86400000,
+  }
+];
+
+export const mockDocuments: MockDocumentVault[] = [
+  {
+    id: "doc_v_1",
+    schoolId: "school_alqalam",
+    studentId: "student_alqalam",
+    name: "Certificat_Scolarite_Yasmine.pdf",
+    type: "certificate",
+    size: "128 KB",
+    createdAt: Date.now() - 15 * 86400000,
+    downloadUrl: "#",
+  },
+  {
+    id: "doc_v_2",
+    schoolId: "school_alqalam",
+    studentId: "student_alqalam",
+    name: "Contrat_Inscription_SchoolHub_2026.pdf",
+    type: "contract",
+    size: "2.4 MB",
+    createdAt: Date.now() - 25 * 86400000,
+    downloadUrl: "#",
+    isSigned: false,
+  },
+  {
+    id: "doc_v_3",
+    schoolId: "school_alqalam",
+    studentId: "student_alqalam",
+    name: "Autorisation_Sortie_Scolaire.pdf",
+    type: "authorization",
+    size: "95 KB",
+    createdAt: Date.now() - 5 * 86400000,
+    downloadUrl: "#",
+    isSigned: true,
+  }
+];
+
+export const mockRolePermissions: MockRolePermissions[] = [
+  {
+    role: "super_admin",
+    permissions: [
+      { action: "manage:schools", description: "Créer et suspendre des écoles", allowed: true },
+      { action: "manage:subscriptions", description: "Modifier les plans Stripe et tarifs", allowed: true },
+      { action: "view:global_kpis", description: "Accéder au CA global et statistiques SaaS", allowed: true },
+      { action: "view:audit_logs", description: "Consulter l'historique complet des actions système", allowed: true },
+    ]
+  },
+  {
+    role: "school_admin",
+    permissions: [
+      { action: "manage:teachers", description: "Recruter et révoquer des professeurs", allowed: true },
+      { action: "manage:students", description: "Inscrire ou radier des élèves", allowed: true },
+      { action: "manage:billing", description: "Gérer l'abonnement de l'école et payer Stripe", allowed: true },
+      { action: "view:audit_logs", description: "Consulter les logs de sécurité de son école", allowed: true },
+      { action: "edit:school_settings", description: "Modifier l'adresse, le nom et le thème", allowed: true },
+    ]
+  },
+  {
+    role: "teacher",
+    permissions: [
+      { action: "write:grades", description: "Saisir et modifier les notes des élèves", allowed: true },
+      { action: "write:attendance", description: "Prendre les présences et absences de classe", allowed: true },
+      { action: "write:assignments", description: "Créer des devoirs et cahiers de texte", allowed: true },
+      { action: "manage:billing", description: "Accéder aux comptes financiers de l'établissement", allowed: false },
+      { action: "edit:school_settings", description: "Modifier la configuration de l'école", allowed: false },
+    ]
+  },
+  {
+    role: "parent",
+    permissions: [
+      { action: "view:grades", description: "Consulter les notes de ses enfants", allowed: true },
+      { action: "view:attendance", description: "Suivre l'assiduité de son enfant", allowed: true },
+      { action: "write:excuses", description: "Soumettre des justifications d'absences", allowed: true },
+      { action: "pay:school_fees", description: "Régler les frais de scolarité en ligne", allowed: true },
+      { action: "write:grades", description: "Modifier les notes ou évaluations", allowed: false },
+    ]
+  }
+];

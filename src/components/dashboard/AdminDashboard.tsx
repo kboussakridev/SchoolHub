@@ -5,8 +5,10 @@ import { useSchoolHub } from "../providers/SchoolHubProvider";
 import { motion, AnimatePresence } from "framer-motion";
 import { 
   GraduationCap, Users, CreditCard, ClipboardCheck, ArrowUpRight, Plus, 
-  RefreshCw, Calendar, FileText, QrCode, AlertTriangle, CheckCircle, ShieldAlert, Sparkles 
+  RefreshCw, Calendar, FileText, QrCode, AlertTriangle, CheckCircle, ShieldAlert, Sparkles,
+  Shield, Key, Sparkle, Search, Loader2, DollarSign, Activity
 } from "lucide-react";
+import { generateExercisesIA, askSchoolHubIA } from "@/lib/ai/aiHelpers";
 
 export default function AdminDashboard() {
   const { 
@@ -16,7 +18,20 @@ export default function AdminDashboard() {
     students, 
     addStudent, 
     auditLogs,
-    toggleSchoolStatus
+    toggleSchoolStatus,
+    activeSchoolId,
+    // ChatGPT Bonus fields
+    buses,
+    canteenMenus,
+    notifications,
+    documents,
+    rolePermissions,
+    addNotification,
+    signDocument,
+    addPaymentInvoice,
+    recordPayment,
+    payments,
+    users
   } = useSchoolHub();
 
   const stats = getSchoolStats();
@@ -27,57 +42,126 @@ export default function AdminDashboard() {
   const [scannedStudent, setScannedStudent] = useState("");
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
+  // ChatGPT Admin Bonus UI States
+  const [adminActiveTab, setAdminActiveTab] = useState<"financials" | "permissions" | "audit" | "ai_assistant">("financials");
+  const [billingStudentId, setBillingStudentId] = useState("");
+  const [billingAmount, setBillingAmount] = useState(80);
+  const [billingDesc, setBillingDesc] = useState("Frais de cantine - Juin 2026");
+  const [billingType, setBillingType] = useState<"tuition" | "transport" | "canteen" | "activity">("canteen");
+  
+  const [cashPaymentId, setCashPaymentId] = useState("");
+  const [cashAmount, setCashAmount] = useState(150);
+  
+  const [aiPrompt, setAiPrompt] = useState("");
+  const [aiResponse, setAiResponse] = useState<string | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
+
   const showToast = (message: string) => {
     setToastMessage(message);
     setTimeout(() => setToastMessage(null), 3500);
   };
 
   const downloadMockFile = (filename: string, content: string) => {
-    showToast("Génération du fichier PDF professionnel en cours...");
-    
-    const runConversion = () => {
-      // Envelopper le contenu texte brut dans une balise pre stylisée pour le PDF
-      const formattedContent = `<pre style="font-family: 'Courier New', Courier, monospace; white-space: pre-wrap; padding: 30px; font-size: 13px; color: #0f172a; line-height: 1.6; background: #ffffff; border-radius: 12px; border: 1px solid #e2e8f0; width: 700px; margin: 0 auto;">${content}</pre>`;
+    showToast("Génération du document de rapport...");
 
-      const opt = {
-        margin: [15, 15],
-        filename: filename,
-        image: { type: 'jpeg', quality: 0.98 },
-        html2canvas: { scale: 2, useCORS: true, logging: false },
-        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
-      };
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      showToast("Erreur : Veuillez autoriser les fenêtres pop-up.");
+      return;
+    }
 
-      // Utiliser directement le rendu de chaîne HTML virtuel natif de html2pdf (sans injection dans le DOM)
-      // @ts-ignore
-      window.html2pdf().from(formattedContent).set(opt).output('blob').then((pdfBlob: Blob) => {
-        // Télécharger en tant que flux binaire générique (application/octet-stream) pour forcer le navigateur à demander l'autorisation sans ouvrir le PDF automatiquement
-        const forceDownloadBlob = new Blob([pdfBlob], { type: "application/octet-stream" });
-        const url = URL.createObjectURL(forceDownloadBlob);
-        const link = document.createElement("a");
-        link.href = url;
-        link.download = filename;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        URL.revokeObjectURL(url);
-        
-        showToast("Fichier PDF téléchargé avec succès !");
-      }).catch((err: any) => {
-        console.error(err);
-        showToast("Erreur lors de la génération du PDF.");
-      });
+    const formattedContent = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>${filename}</title>
+  <style>
+    body { 
+      background: #ffffff; 
+      color: #0f172a; 
+      margin: 0; 
+      padding: 40px; 
+      font-family: monospace; 
+    }
+    pre { 
+      white-space: pre-wrap; 
+      font-size: 13px; 
+      line-height: 1.6; 
+      border: 1px solid #e2e8f0;
+      border-radius: 12px;
+      padding: 30px;
+      background: #ffffff;
+      max-width: 800px;
+      margin: 0 auto;
+    }
+    @media print {
+      body { padding: 0; }
+      pre { border: none; padding: 0; }
+    }
+  </style>
+</head>
+<body>
+  <pre>${content}</pre>
+  <script>
+    // Trigger browser print dialog on page load
+    window.onload = function() {
+      setTimeout(function() {
+        window.print();
+      }, 350);
     };
+  </script>
+</body>
+</html>`;
 
-    // @ts-ignore
-    if (window.html2pdf) {
-      runConversion();
-    } else {
-      const script = document.createElement("script");
-      script.src = "https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js";
-      script.onload = () => {
-        runConversion();
-      };
-      document.head.appendChild(script);
+    printWindow.document.write(formattedContent);
+    printWindow.document.close();
+    showToast("Le document PDF vectoriel est prêt !");
+  };
+
+  const handleAdminAiRequest = async (type: "exercise" | "struggle") => {
+    setAiLoading(true);
+    setAiResponse(null);
+    try {
+      if (type === "exercise") {
+        const exercises = await generateExercisesIA({
+          classLevel: "CE2",
+          subject: "Mathématiques",
+          topic: "Fractions équivalentes",
+          difficulty: "medium",
+          count: 3
+        });
+        
+        const formatted = [
+          "### 📚 Devoir Généré par l'IA : Fractions Équivalentes (Niveau CE2)",
+          "**Consignes d'exercices générées en direct par Llama 3.3 :**",
+          ...exercises.map((ex, idx) => {
+            const qcm = ex.options && ex.options.length > 0 
+              ? `\n*Choix multiples : ${ex.options.join(" | ")}*`
+              : "";
+            return `${idx + 1}. **${ex.question}**${qcm}\n*   **Réponse attendue** : ${ex.correctAnswer}\n*   **Explication** : ${ex.explanation}`;
+          }),
+          "*Le devoir a été automatiquement formaté et pré-rempli dans le module Cahier de Texte.*"
+        ].join("\n\n");
+        
+        setAiResponse(formatted);
+      } else {
+        const systemPrompt = `Tu es l'assistant IA de SchoolHub, expert en analyse prédictive et conseiller d'éducation scolaire.
+Tu rédiges un rapport d'analyse sur le décrochage scolaire et les élèves en difficulté en français.
+Utilise des puces et des titres commençant par ###.
+Donne des recommandations concrètes et bienveillantes pour redresser la situation (par ex. pour Lucas Dubois ou Yasmine Mansour, ou d'autres élèves).`;
+
+        const userPrompt = `Analyse l'assiduité globale et les notes récentes pour identifier les élèves en difficulté ou en situation de décrochage. Rédige un rapport avec des alertes précises et des plans d'action.`;
+        
+        const response = await askSchoolHubIA(userPrompt, systemPrompt);
+        setAiResponse(response);
+      }
+      showToast("Analyse de l'IA complétée avec succès !");
+    } catch (err) {
+      console.error(err);
+      showToast("Erreur lors de la communication avec le serveur d'IA.");
+      setAiResponse("Désolé, je rencontre des difficultés pour joindre le serveur d'IA Llama 3.3. Veuillez vérifier vos clés API dans le fichier `.env` ou sur Convex.");
+    } finally {
+      setAiLoading(false);
     }
   };
 
@@ -542,6 +626,383 @@ Ce document est un rapport généré automatiquement pour la simulation SchoolHu
                Exporter les rapports scolaires
               </button>
           </div>
+        </div>
+
+        {/* ========================================================= */}
+        {/* CHATGPT ADVANCED SCHOOL ADMIN PANEL */}
+        {/* ========================================================= */}
+        <div 
+          className="p-6 rounded-2xl glass-card flex flex-col gap-6"
+          style={{ border: "1px solid hsl(var(--border))" }}
+        >
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-4" style={{ borderBottom: "1px solid hsl(var(--border))" }}>
+            <div>
+              <h3 className="font-extrabold text-sm flex items-center gap-2 uppercase tracking-wider" style={{ color: "hsl(var(--foreground))" }}>
+                <Shield className="w-4.5 h-4.5 text-purple-400" />
+                Console d'Administration Avancée &amp; Pilotage SaaS
+              </h3>
+              <p className="text-[10px] mt-0.5" style={{ color: "hsl(var(--muted-foreground))" }}>
+                Facturez les transports/cantine, contrôlez les permissions fines, consultez les logs d'audit et utilisez l'IA.
+              </p>
+            </div>
+            
+            {/* Tab buttons */}
+            <div className="flex flex-wrap gap-1 p-1 rounded-xl shrink-0" style={{ backgroundColor: "hsl(var(--secondary))" }}>
+              {[
+                { id: "financials", name: "Facturation Scolaire", icon: DollarSign },
+                { id: "permissions", name: "Permissions (RBAC)", icon: Key },
+                { id: "audit", name: "Logs d'Audit", icon: Activity },
+                { id: "ai_assistant", name: "Assistant Professeur IA", icon: Sparkles }
+              ].map((t) => {
+                const Icon = t.icon;
+                const isActive = adminActiveTab === t.id;
+                return (
+                  <button
+                    key={t.id}
+                    onClick={() => setAdminActiveTab(t.id as any)}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all cursor-pointer ${
+                      isActive 
+                        ? "bg-purple-600 text-white shadow-lg shadow-purple-600/10" 
+                        : "hover:text-white"
+                    }`}
+                    style={!isActive ? { color: "hsl(var(--muted-foreground))" } : undefined}
+                  >
+                    <Icon className="w-3 h-3" />
+                    {t.name}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Tab contents */}
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={adminActiveTab}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              transition={{ duration: 0.2 }}
+              className="w-full"
+            >
+              {/* 1. COMPTABILITE / FACTURATION ADVANCED TAB */}
+              {adminActiveTab === "financials" && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {/* Issue Invoice Form */}
+                  <div className="p-4 rounded-xl flex flex-col gap-4" style={{ backgroundColor: "hsl(var(--secondary))", border: "1px solid hsl(var(--border))" }}>
+                    <h4 className="font-bold text-[10px] flex items-center gap-1.5 uppercase tracking-wide" style={{ color: "hsl(var(--foreground))" }}>
+                      <Plus className="w-3.5 h-3.5 text-purple-400" />
+                      Émettre une Facture Scolaire (Frais Extra)
+                    </h4>
+                    <div className="flex flex-col gap-3 mt-2 text-xs">
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[9px] font-bold" style={{ color: "hsl(var(--muted-foreground))" }}>ÉLÈVE CONCERNÉ</label>
+                        <select 
+                          value={billingStudentId}
+                          onChange={(e) => setBillingStudentId(e.target.value)}
+                          className="p-2 rounded-lg focus:outline-none cursor-pointer"
+                          style={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", color: "hsl(var(--foreground))" }}
+                        >
+                          <option value="">-- Sélectionner l'élève --</option>
+                          {students
+                            .filter(s => s.schoolId === activeSchoolId)
+                            .map(s => {
+                              const u = users.find(usr => usr.id === s.userId);
+                              return (
+                                <option key={s.id} value={s.id}>{u?.name || s.id} ({s.level})</option>
+                              );
+                            })}
+                        </select>
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="flex flex-col gap-1">
+                          <label className="text-[9px] font-bold" style={{ color: "hsl(var(--muted-foreground))" }}>MONTANT (EUR)</label>
+                          <input 
+                            type="number"
+                            value={billingAmount}
+                            onChange={(e) => setBillingAmount(Number(e.target.value))}
+                            className="p-2 rounded-lg focus:outline-none"
+                            style={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", color: "hsl(var(--foreground))" }}
+                          />
+                        </div>
+                        <div className="flex flex-col gap-1">
+                          <label className="text-[9px] font-bold" style={{ color: "hsl(var(--muted-foreground))" }}>TYPE DE FRAIS</label>
+                          <select 
+                            value={billingType}
+                            onChange={(e) => setBillingType(e.target.value as any)}
+                            className="p-2 rounded-lg focus:outline-none cursor-pointer"
+                            style={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", color: "hsl(var(--foreground))" }}
+                          >
+                            <option value="canteen">Repas Cantine</option>
+                            <option value="transport">Transport Navette</option>
+                            <option value="activity">Activité / Sortie</option>
+                            <option value="tuition">Frais d'inscription</option>
+                          </select>
+                        </div>
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[9px] font-bold" style={{ color: "hsl(var(--muted-foreground))" }}>LIBELLÉ / DESCRIPTION</label>
+                        <input 
+                          type="text"
+                          value={billingDesc}
+                          onChange={(e) => setBillingDesc(e.target.value)}
+                          className="p-2 rounded-lg focus:outline-none"
+                          style={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", color: "hsl(var(--foreground))" }}
+                        />
+                      </div>
+                      <button
+                        onClick={() => {
+                          if (!billingStudentId) {
+                            showToast("Veuillez sélectionner un élève !");
+                            return;
+                          }
+                          addPaymentInvoice(billingStudentId, billingAmount, billingDesc, billingType);
+                          showToast("Facture émise avec succès dans le carnet comptable !");
+                        }}
+                        className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-bold text-[10px] shadow-lg shadow-purple-500/10 cursor-pointer transition-all self-start mt-2"
+                      >
+                        Créer la Facture
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Cash/Partial Payment Form */}
+                  <div className="p-4 rounded-xl flex flex-col gap-4" style={{ backgroundColor: "hsl(var(--secondary))", border: "1px solid hsl(var(--border))" }}>
+                    <h4 className="font-bold text-[10px] flex items-center gap-1.5 uppercase tracking-wide" style={{ color: "hsl(var(--foreground))" }}>
+                      <DollarSign className="w-3.5 h-3.5 text-purple-400" />
+                      Enregistrer un Paiement (Espèces, Partiel)
+                    </h4>
+                    <div className="flex flex-col gap-3 mt-2 text-xs">
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[9px] font-bold" style={{ color: "hsl(var(--muted-foreground))" }}>FACTURE EN ATTENTE</label>
+                        <select 
+                          value={cashPaymentId}
+                          onChange={(e) => {
+                            setCashPaymentId(e.target.value);
+                            const p = payments.find(pay => pay.id === e.target.value);
+                            if (p) setCashAmount(p.amount);
+                          }}
+                          className="p-2 rounded-lg focus:outline-none cursor-pointer"
+                          style={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", color: "hsl(var(--foreground))" }}
+                        >
+                          <option value="">-- Sélectionner la facture --</option>
+                          {payments
+                            .filter(p => p.schoolId === activeSchoolId && p.status !== "paid")
+                            .map(p => {
+                              const s = students.find(stud => stud.id === p.studentId);
+                              const u = users.find(usr => usr.id === s?.userId);
+                              return (
+                                <option key={p.id} value={p.id}>[{u?.name || "Elève"}] {p.description} - {p.amount} EUR</option>
+                              );
+                            })}
+                        </select>
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="flex flex-col gap-1">
+                          <label className="text-[9px] font-bold" style={{ color: "hsl(var(--muted-foreground))" }}>SOMME REÇUE (EUR)</label>
+                          <input 
+                            type="number"
+                            value={cashAmount}
+                            onChange={(e) => setCashAmount(Number(e.target.value))}
+                            className="p-2 rounded-lg focus:outline-none"
+                            style={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", color: "hsl(var(--foreground))" }}
+                          />
+                        </div>
+                        <div className="flex flex-col gap-1">
+                          <label className="text-[9px] font-bold" style={{ color: "hsl(var(--muted-foreground))" }}>MODE DE PAIEMENT</label>
+                          <span className="p-2 rounded-lg font-bold text-center" style={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", color: "hsl(var(--foreground))" }}>
+                            💵 Espèces (Cash)
+                          </span>
+                        </div>
+                      </div>
+                      
+                      <div className="flex gap-2 mt-3">
+                        <button
+                          onClick={() => {
+                            if (!cashPaymentId) {
+                              showToast("Veuillez sélectionner une facture !");
+                              return;
+                            }
+                            recordPayment(cashPaymentId, "cash");
+                            showToast("Paiement complet en espèces enregistré !");
+                            setCashPaymentId("");
+                          }}
+                          className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold text-[10px] shadow-lg cursor-pointer transition-all"
+                        >
+                          Régler Totalité
+                        </button>
+                        <button
+                          onClick={() => {
+                            if (!cashPaymentId) {
+                              showToast("Veuillez sélectionner une facture !");
+                              return;
+                            }
+                            recordPayment(cashPaymentId, "cash", cashAmount);
+                            showToast("Paiement partiel enregistré dans Convex !");
+                            setCashPaymentId("");
+                          }}
+                          className="px-4 py-2 bg-amber-500/10 hover:bg-amber-500 text-amber-300 hover:text-white border border-amber-500/30 rounded-lg font-bold text-[10px] transition-all cursor-pointer"
+                        >
+                          Paiement Partiel
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* 2. FINE-GRAINED PERMISSIONS (RBAC) TAB */}
+              {adminActiveTab === "permissions" && (
+                <div className="flex flex-col gap-4 animate-fade-in">
+                  <div className="flex justify-between items-center pb-2">
+                    <h4 className="font-bold text-[10px] uppercase tracking-wide flex items-center gap-1.5" style={{ color: "hsl(var(--foreground))" }}>
+                      <Key className="w-4 h-4 text-purple-400" />
+                      Permissions Fines du Système Multi-Rôles
+                    </h4>
+                    <span className="text-[8px] bg-purple-500/10 text-purple-400 border border-purple-500/20 px-2 py-0.5 rounded font-mono">
+                      STATUT : SÉCURISÉ RBAC STRICT
+                    </span>
+                  </div>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-left">
+                    {rolePermissions.map((rp) => (
+                      <div key={rp.role} className="p-4 rounded-xl flex flex-col gap-3 justify-between" style={{ backgroundColor: "hsl(var(--secondary))", border: "1px solid hsl(var(--border))" }}>
+                        <div className="pb-2 border-b border-white/5">
+                          <span className="font-black text-xs uppercase text-purple-400">RÔLE : {rp.role}</span>
+                        </div>
+                        <div className="flex flex-col gap-2 flex-grow">
+                          {rp.permissions.map((p) => (
+                            <div key={p.action} className="flex justify-between items-center text-[10px] gap-2">
+                              <div className="flex flex-col text-left">
+                                <span className="font-mono text-zinc-300">{p.action}</span>
+                                <span className="text-[8px] text-zinc-500">{p.description}</span>
+                              </div>
+                              <span className={`px-1.5 py-0.5 rounded text-[7px] font-bold uppercase ${
+                                p.allowed 
+                                  ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/15" 
+                                  : "bg-red-500/10 text-red-400 border border-red-500/15"
+                              }`}>
+                                {p.allowed ? "OK" : "REFUS"}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                        <button
+                          onClick={() => showToast(`Modifications des permissions pour le rôle '${rp.role}' verrouillées en démo.`)}
+                          className="w-full text-center mt-3 py-1 bg-zinc-950/40 hover:bg-purple-600/10 rounded-lg text-[8px] font-bold border border-white/5 transition-all cursor-pointer text-zinc-500 hover:text-purple-400"
+                        >
+                          Éditer Permissions
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* 3. AUDIT LOGS TRAÇABILITÉ TAB */}
+              {adminActiveTab === "audit" && (
+                <div className="flex flex-col gap-4 animate-fade-in">
+                  <h4 className="font-bold text-[10px] uppercase tracking-wide flex items-center gap-1.5" style={{ color: "hsl(var(--foreground))" }}>
+                    <Activity className="w-4 h-4 text-purple-400" />
+                    Journal d'Audit Système &amp; Traçabilité Sécurité (RGPD)
+                  </h4>
+                  <div className="flex flex-col gap-2 mt-2 max-h-60 overflow-y-auto pr-1 text-xs">
+                    {auditLogs.map((log) => {
+                      const u = users.find(usr => usr.id === log.userId);
+                      return (
+                        <div key={log.id} className="p-3 rounded-lg flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 transition-all" style={{ backgroundColor: "hsl(var(--secondary))", border: "1px solid hsl(var(--border))" }}>
+                          <div className="flex items-center gap-3">
+                            <span className={`px-2 py-0.5 rounded text-[8px] font-bold uppercase ${
+                              log.action.includes("DELETE") ? "bg-red-500/10 text-red-400 border border-red-500/20" :
+                              log.action.includes("CREATE") ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" :
+                              "bg-purple-500/10 text-purple-400 border border-purple-500/20"
+                            }`}>
+                              {log.action}
+                            </span>
+                            <span className="font-bold" style={{ color: "hsl(var(--foreground))" }}>{log.details}</span>
+                          </div>
+                          <div className="flex items-center gap-3 text-[9px] uppercase font-bold text-zinc-500 self-end sm:self-center shrink-0">
+                            <span>Auteur: {u?.name || log.userId}</span>
+                            <span>IP: {log.ipAddress || "system"}</span>
+                            <span>Date: {new Date(log.timestamp).toLocaleTimeString()}</span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* 4. ASSISTANT PROFESSEUR IA TAB */}
+              {adminActiveTab === "ai_assistant" && (
+                <div className="p-4 rounded-xl flex flex-col gap-4 bg-gradient-to-br from-purple-500/5 to-indigo-500/5" style={{ border: "1px solid hsl(var(--border))" }}>
+                  <div className="flex items-center justify-between pb-3" style={{ borderBottom: "1px solid hsl(var(--border))" }}>
+                    <div className="flex items-center gap-2">
+                      <div className="p-1.5 bg-purple-600/15 rounded-lg text-purple-400">
+                        <Sparkles className="w-4 h-4 animate-pulse" />
+                      </div>
+                      <div className="flex flex-col text-left">
+                        <span className="font-extrabold text-[11px]" style={{ color: "hsl(var(--foreground))" }}>Générateur de Cours &amp; Aide au Décrochage IA</span>
+                        <span className="text-[8px] text-zinc-500 font-mono">Modèle : Llama 3.2 Fine-Tuned (Teacher Mode)</span>
+                      </div>
+                    </div>
+                    <span className="text-[8px] bg-purple-500/10 font-bold px-2 py-0.5 rounded border border-purple-500/20 uppercase" style={{ color: "hsl(var(--primary))" }}>
+                      IA active
+                    </span>
+                  </div>
+
+                  <div className="flex flex-col gap-4 text-xs font-normal">
+                    <p className="text-[10px] leading-normal" style={{ color: "hsl(var(--muted-foreground))" }}>
+                      Bonjour Karim Boussakri. Je suis l'assistant pédagogique IA de SchoolHub.
+                      Je peux générer des devoirs ou examiner les notes et absences pour repérer les élèves en difficulté de façon automatisée.
+                    </p>
+
+                    {/* Actions buttons */}
+                    <div className="flex flex-wrap gap-2.5 pt-1">
+                      <button
+                        onClick={() => handleAdminAiRequest("exercise")}
+                        className="px-3 py-1.5 rounded-lg bg-zinc-950/40 border border-white/5 hover:border-purple-500/30 text-[9px] font-bold cursor-pointer transition-colors"
+                        style={{ color: "hsl(var(--foreground))" }}
+                      >
+                        📝 Générer un devoir (CE2 Fractions)
+                      </button>
+                      <button
+                        onClick={() => handleAdminAiRequest("struggle")}
+                        className="px-3 py-1.5 rounded-lg bg-zinc-950/40 border border-white/5 hover:border-purple-500/30 text-[9px] font-bold cursor-pointer transition-colors"
+                        style={{ color: "hsl(var(--foreground))" }}
+                      >
+                        📊 Analyser le décrochage / élèves en difficulté
+                      </button>
+                    </div>
+
+                    {/* Response display */}
+                    {aiLoading ? (
+                      <div className="p-4 rounded-xl flex items-center justify-center gap-2 bg-zinc-950/30 border border-white/5">
+                        <Loader2 className="w-3.5 h-3.5 text-purple-400 animate-spin" />
+                        <span className="text-[8px] text-zinc-500 font-bold uppercase">Génération IA en cours...</span>
+                      </div>
+                    ) : aiResponse ? (
+                      <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        className="p-3.5 rounded-xl bg-zinc-950/40 border border-purple-500/10 leading-relaxed font-sans text-[10px] flex flex-col gap-2 max-h-72 overflow-y-auto text-left"
+                      >
+                        {aiResponse.split("\n\n").map((para, pIdx) => {
+                          if (para.startsWith("###")) {
+                            return <h4 key={pIdx} className="font-extrabold text-[10px] text-purple-400 mt-1">{para.replace("###", "").trim()}</h4>;
+                          }
+                          if (para.startsWith("**")) {
+                            return <p key={pIdx} className="text-zinc-300 font-medium">{para}</p>;
+                          }
+                          return <p key={pIdx} className="text-zinc-400 leading-normal font-normal">{para}</p>;
+                        })}
+                      </motion.div>
+                    ) : null}
+                  </div>
+                </div>
+              )}
+            </motion.div>
+          </AnimatePresence>
         </div>
       </div>
 
